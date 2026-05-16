@@ -48,6 +48,18 @@ export const sandboxedLessonSpecSchema = z.object({
       })
     )
     .optional(),
+  schemaData: z
+    .object({
+      provider: z.enum(["pioneer-gliner2", "heuristic"]),
+      entities: z.array(
+        z.object({
+          label: z.string(),
+          kind: z.string(),
+          span: z.string().optional(),
+        })
+      ),
+    })
+    .optional(),
   studio: z.unknown().optional(),
 });
 
@@ -88,6 +100,15 @@ type StaticLessonMedia = {
     mime: string;
     alt: string;
   };
+};
+
+type StaticLessonSchemaData = {
+  provider: "pioneer-gliner2" | "heuristic";
+  entities: {
+    label: string;
+    kind: string;
+    span?: string;
+  }[];
 };
 
 const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
@@ -325,6 +346,7 @@ export function createSandboxedLessonArtifact(input: {
   plan: LessonPlan;
   runtimeScript?: string;
   media?: StaticLessonMedia;
+  schemaData?: StaticLessonSchemaData;
 }): SandboxedLessonArtifact {
   const spec: SandboxedLessonSpec = isSolarSystemPrompt(input.prompt)
     ? {
@@ -355,6 +377,7 @@ export function createSandboxedLessonArtifact(input: {
           choices: input.plan.quiz.items[0]?.choices ?? [],
           answer: input.plan.quiz.items[0]?.answer ?? "",
         },
+        schemaData: input.schemaData,
       };
 
   const html =
@@ -499,6 +522,13 @@ function createStaticLessonHtml(
       media?.video ? { ...media.video, modality: "video" as const } : null,
       media?.audio ? { ...media.audio, modality: "audio" as const } : null,
     ].filter((item) => item !== null);
+  const runtimeData = {
+    ...spec,
+    plan,
+    media: {
+      assets: mediaItems,
+    },
+  };
 
   return `<!doctype html>
 <html lang="en">
@@ -507,141 +537,262 @@ function createStaticLessonHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(spec.title)}</title>
   <style>
-    body { margin: 0; background: #f8fafc; color: #0f172a; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    main { max-width: 860px; margin: 0 auto; padding: 56px 20px; }
-    h1 { font-size: clamp(34px, 6vw, 64px); line-height: 1; letter-spacing: 0; margin: 0 0 18px; }
-    section { border-top: 1px solid #cbd5e1; padding: 26px 0; }
+    :root { color-scheme: light; --ink: #172033; --muted: #5b6475; --paper: #fffaf1; --panel: rgba(255, 255, 250, .82); --line: rgba(23, 32, 51, .16); --teal: #006d68; --mint: #d7eee7; --gold: #f3b23e; --coral: #d95562; --iris: #4f63c7; --leaf: #6f9633; --night: #171d2b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: linear-gradient(135deg, #fff2d8 0%, #e3f5ed 42%, #f6eefc 100%); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .38; background-image: linear-gradient(rgba(23, 32, 51, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 32, 51, .055) 1px, transparent 1px); background-size: 44px 44px; }
+    main { position: relative; overflow: hidden; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3, .kicker { letter-spacing: 0; }
     p, li { line-height: 1.65; }
-    .lesson-copy { white-space: pre-wrap; line-height: 1.7; }
-    .grid-list { display: grid; gap: 12px; padding: 0; list-style: none; }
-    .grid-list li { border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; padding: 14px; }
-    .media-stack { display: grid; gap: 14px; }
-    .media-shell { overflow: hidden; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; }
-    .media-shell img, .media-shell video { display: block; width: 100%; max-height: 460px; object-fit: contain; background: #020617; }
-    .media-shell audio { width: 100%; padding: 14px; }
-    figcaption { border-top: 1px solid #dbe3ee; padding: 10px 14px; color: #475569; font-size: 13px; }
-    .term { display: block; font-weight: 800; color: #0f766e; }
-    button { border: 1px solid #94a3b8; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; font: inherit; font-weight: 700; padding: 10px 12px; }
-    button:hover { border-color: #0f766e; }
-    button.selected { border-color: #0f766e; background: #ccfbf1; color: #134e4a; }
-    button.correct { border-color: #15803d; background: #dcfce7; color: #14532d; }
-    button.wrong { border-color: #b91c1c; background: #fee2e2; color: #7f1d1d; }
-    .objective-list { display: grid; gap: 10px; padding: 0; list-style: none; }
-    .objective-list li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
-    .objective-list button { height: 28px; width: 28px; padding: 0; line-height: 1; }
-    .objective-list button.is-complete { background: #0f766e; border-color: #0f766e; color: #fff; }
-    .choices { display: flex; flex-wrap: wrap; gap: 10px; }
-    [data-quiz-choice].is-correct { border-color: #15803d; background: #dcfce7; color: #14532d; }
-    [data-quiz-choice].is-wrong { border-color: #b91c1c; background: #fee2e2; color: #7f1d1d; }
-    [data-quiz-feedback] { font-weight: 700; }
-    .kicker { color: #0f766e; font-size: 12px; text-transform: uppercase; letter-spacing: .16em; font-weight: 800; }
+    button { border: 1px solid rgba(23, 32, 51, .18); border-radius: 6px; background: #fffdf6; color: var(--ink); cursor: pointer; font: inherit; font-weight: 760; padding: 10px 12px; transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease; }
+    button:hover { border-color: var(--teal); transform: translateY(-1px); }
+    button.selected { border-color: var(--teal); background: var(--mint); color: #063f3d; }
+    button.correct, [data-quiz-choice].is-correct { border-color: #198754; background: #dff7e8; color: #0b5132; }
+    button.wrong, [data-quiz-choice].is-wrong { border-color: #b42338; background: #ffe4e8; color: #7a1021; }
+    .kicker { color: var(--teal); font-size: 12px; text-transform: uppercase; font-weight: 860; }
+    .lesson-hero { position: relative; min-height: 520px; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(300px, .88fr); gap: 32px; align-items: end; max-width: 1240px; margin: 0 auto; padding: 64px 28px 44px; }
+    .lesson-hero::before { content: ""; position: absolute; inset: 24px 18px; z-index: -1; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: linear-gradient(130deg, rgba(255, 255, 255, .66), rgba(255, 255, 255, .28)), repeating-linear-gradient(135deg, rgba(0, 109, 104, .1) 0 2px, transparent 2px 18px); box-shadow: 0 30px 90px rgba(23, 32, 51, .16); }
+    .hero-copy h1 { max-width: 820px; margin: 12px 0 18px; font-size: 64px; line-height: .98; }
+    .hero-summary { max-width: 760px; color: #2d3b4f; font-size: 19px; line-height: 1.7; }
+    .lesson-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    .pill { display: inline-flex; align-items: center; min-height: 34px; border: 1px solid rgba(23, 32, 51, .15); border-radius: 999px; background: rgba(255, 253, 246, .78); color: #263244; padding: 7px 12px; font-size: 13px; font-weight: 760; }
+    .hero-panel { position: relative; border: 1px solid rgba(23, 32, 51, .15); border-radius: 8px; background: rgba(255, 253, 246, .86); padding: 24px; box-shadow: 0 18px 54px rgba(23, 32, 51, .14); backdrop-filter: blur(14px); }
+    .hero-panel h2 { margin-bottom: 16px; font-size: 25px; }
+    .stage { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
+    .lesson-band { border-top: 1px solid var(--line); padding: 42px 0; }
+    .band-heading { display: grid; grid-template-columns: minmax(0, .9fr) minmax(220px, .45fr); gap: 22px; align-items: end; margin-bottom: 22px; }
+    .band-heading h2 { margin-bottom: 0; font-size: 34px; line-height: 1.08; }
+    .band-heading p { margin-bottom: 0; color: var(--muted); }
+    .lesson-copy { white-space: pre-wrap; line-height: 1.72; }
+    .objective-list { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+    .objective-list li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; border: 1px solid rgba(0, 109, 104, .16); border-radius: 8px; background: linear-gradient(135deg, rgba(215, 238, 231, .78), rgba(255, 253, 246, .9)); padding: 12px; }
+    .objective-list button { height: 30px; width: 30px; padding: 0; line-height: 1; border-radius: 999px; }
+    .objective-list button.is-complete { background: var(--teal); border-color: var(--teal); color: #fff; }
+    .media-showcase { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+    .media-shell { overflow: hidden; margin: 0; border: 1px solid rgba(23, 32, 51, .16); border-radius: 8px; background: var(--night); color: #f8fafc; box-shadow: 0 18px 48px rgba(23, 32, 51, .18); }
+    .media-shell img, .media-shell video { display: block; width: 100%; max-height: 480px; object-fit: contain; background: #111827; }
+    .media-shell audio { width: 100%; padding: 16px; background: #fffdf6; }
+    figcaption { border-top: 1px solid rgba(255, 255, 255, .14); padding: 12px 14px; color: #e7edf8; font-size: 13px; line-height: 1.5; }
+    .talk-track { display: grid; gap: 14px; }
+    .script-beat { display: grid; grid-template-columns: 56px 1fr; gap: 16px; align-items: start; border: 1px solid rgba(23, 32, 51, .15); border-left: 5px solid var(--iris); border-radius: 8px; background: linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(231, 238, 255, .72)); padding: 18px; }
+    .script-beat:nth-child(2n) { border-left-color: var(--coral); background: linear-gradient(135deg, rgba(255, 247, 231, .94), rgba(255, 229, 233, .7)); }
+    .script-beat:nth-child(3n) { border-left-color: var(--leaf); background: linear-gradient(135deg, rgba(246, 252, 232, .94), rgba(215, 238, 231, .74)); }
+    .beat-number { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: var(--night); color: #fff; font-weight: 860; }
+    .script-beat h3 { margin-bottom: 8px; font-size: 20px; }
+    .concept-grid { display: grid; grid-template-columns: minmax(250px, .7fr) minmax(0, 1.3fr); gap: 20px; align-items: start; }
+    .vocab-panel, .example-panel, .teacher-notes, .reflection-panel { border-radius: 8px; padding: 22px; }
+    .vocab-panel { border: 1px solid rgba(0, 109, 104, .18); background: linear-gradient(180deg, rgba(215, 238, 231, .92), rgba(255, 253, 246, .84)); }
+    .vocab-cloud { display: grid; gap: 12px; padding: 0; margin: 0; list-style: none; }
+    .vocab-cloud li { border: 1px solid rgba(0, 109, 104, .18); border-radius: 8px; background: rgba(255, 253, 246, .78); padding: 13px; }
+    .term { display: block; color: var(--teal); font-weight: 860; margin-bottom: 4px; }
+    .explain-timeline { display: grid; gap: 14px; }
+    .explain-step { display: grid; grid-template-columns: 92px 1fr; gap: 16px; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: rgba(255, 253, 246, .82); padding: 18px; }
+    .step-tag { color: var(--coral); font-weight: 860; }
+    .example-panel { display: grid; grid-template-columns: .75fr 1.25fr; gap: 22px; align-items: start; background: var(--night); color: #f8fafc; }
+    .example-panel .kicker { color: #f8c76a; }
+    .example-panel p { color: #dce6f5; }
+    .activity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; padding: 0; margin: 20px 0 0; list-style: none; }
+    .activity-card { border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .92), rgba(255, 244, 217, .76)); padding: 16px; }
+    .choice-row, .choices { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    [data-classify-result], [data-quiz-feedback] { min-height: 24px; margin: 12px 0 0; color: #263244; font-weight: 760; }
+    .quiz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .quiz-card { display: grid; align-content: start; border: 1px solid rgba(23, 32, 51, .15); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .94), rgba(235, 242, 255, .8)); padding: 18px; box-shadow: 0 16px 44px rgba(23, 32, 51, .12); }
+    .answer-line { display: none; }
+    .reflection-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(260px, .7fr); gap: 18px; }
+    .reflection-panel { border: 1px solid rgba(79, 99, 199, .18); background: linear-gradient(135deg, rgba(235, 238, 255, .9), rgba(255, 253, 246, .84)); }
+    .teacher-notes { background: var(--night); color: #f8fafc; }
+    .teacher-notes ul { margin-bottom: 0; }
+    .teacher-notes li { color: #dce6f5; }
+    @media (max-width: 860px) {
+      .lesson-hero, .band-heading, .concept-grid, .example-panel, .reflection-grid { grid-template-columns: 1fr; }
+      .lesson-hero { min-height: 0; padding: 40px 18px 30px; }
+      .hero-copy h1 { font-size: 44px; }
+      .stage { padding-left: 16px; padding-right: 16px; }
+    }
+    @media (max-width: 560px) {
+      .hero-copy h1 { font-size: 34px; }
+      .hero-summary { font-size: 16px; }
+      .explain-step, .script-beat { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
+    }
   </style>
 </head>
 <body>
-  <main data-runtime="static-lesson">
-    <p class="kicker">Saved lesson</p>
-    <h1>${escapeHtml(spec.title)}</h1>
-    <p>${escapeHtml(plan.hookBody)}</p>
-    ${
-      mediaItems.length
-        ? `<section>
-      <h2>Watch and listen</h2>
-      <div class="media-stack">
-        ${mediaItems
-          .map((item) => {
-            if (item.modality === "image") {
-              return `<figure class="media-shell"><img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.alt)}" loading="lazy" /><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
-            }
-            if (item.modality === "video") {
-              return `<figure class="media-shell"><video src="${escapeHtml(item.url)}" controls playsinline preload="metadata"><track kind="captions" /></video><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
-            }
-            return `<figure class="media-shell"><audio src="${escapeHtml(item.url)}" controls preload="none"><track kind="captions" /></audio><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
-          })
-          .join("")}
+  <main class="lesson-page" data-runtime="static-lesson">
+    <header class="lesson-hero">
+      <div class="hero-copy">
+        <p class="kicker">Guided lesson</p>
+        <h1>${escapeHtml(spec.title)}</h1>
+        <p class="hero-summary">${escapeHtml(plan.hookBody)}</p>
+        <div class="lesson-meta">
+          <span class="pill">${escapeHtml(plan.gradeBand)}</span>
+          <span class="pill">${escapeHtml(String(plan.durationMinutes))} minutes</span>
+          <span class="pill">${escapeHtml(plan.quiz.title)}</span>
+        </div>
       </div>
-    </section>`
-        : ""
-    }
-    <section>
-      <h2>Lecture script</h2>
-      <div class="lesson-copy">${escapeHtml(
-        plan.lectureScript
-          .map(
-            (item, index) =>
-              `${index + 1}. ${item.title}\nTeacher says: ${item.teacherNarration}\nStudents do: ${item.studentAction}`
-          )
-          .join("\n\n")
-      )}</div>
-    </section>
-    <section>
-      <h2>Learning objectives</h2>
-      <ul class="objective-list">${plan.objectives.map((item) => `<li><button type="button" aria-pressed="false" data-objective-toggle>✓</button><span>${escapeHtml(item)}</span></li>`).join("")}</ul>
-    </section>
-    <section>
-      <h2>Key vocabulary</h2>
-      <ul class="grid-list">${plan.keyVocabulary.map((item) => `<li><span class="term">${escapeHtml(item.term)}</span>${escapeHtml(item.definition)}</li>`).join("")}</ul>
-    </section>
-    <section>
-      <h2>Explanation</h2>
-      ${plan.explanationSections.map((section) => `<article><h3>${escapeHtml(section.title)}</h3><div class="lesson-copy">${escapeHtml(section.body)}</div></article>`).join("")}
-    </section>
-    <section>
-      <h2>${escapeHtml(plan.workedExample.title)}</h2>
-      <div class="lesson-copy">${escapeHtml(plan.workedExample.body)}</div>
-    </section>
-    <section>
-      <h2>${escapeHtml(plan.activity.title)}</h2>
-      <p>${escapeHtml(plan.activity.instruction)}</p>
-      <ul class="grid-list">
-        ${[
-          ...plan.activity.strongItems.map((item, index) => ({
-            id: `strong-${index + 1}`,
-            label: item,
-            answer: "strong",
-          })),
-          ...plan.activity.weakItems.map((item, index) => ({
-            id: `weak-${index + 1}`,
-            label: item,
-            answer: "weak",
-          })),
-        ]
-          .map(
-            (item) => `<li data-classify-card data-answer="${item.answer}">
-              <span class="term">${escapeHtml(item.label)}</span>
-              <p>
-                <button type="button" data-classify-choice="${item.id}:strong">${escapeHtml(plan.activity.strongFitLabel)}</button>
-                <button type="button" data-classify-choice="${item.id}:weak">${escapeHtml(plan.activity.weakFitLabel)}</button>
-              </p>
-              <p data-classify-result></p>
-            </li>`
-          )
-          .join("")}
-      </ul>
-    </section>
-    <section>
-      <h2>${escapeHtml(plan.quiz.title)}</h2>
-      ${plan.quiz.items
-        .map(
-          (item, index) => `<article>
-        <h3>Question ${index + 1}</h3>
-        <p>${escapeHtml(item.stem)}</p>
-        <div class="choices">${item.choices.map((choice) => `<button type="button" data-quiz-choice>${escapeHtml(choice)}</button>`).join("")}</div>
-        <p data-quiz-feedback></p>
-        <p><strong>Answer:</strong> <span data-quiz-answer>${escapeHtml(item.answer)}</span></p>
-        <p>${escapeHtml(item.explanation)}</p>
-      </article>`
-        )
-        .join("")}
-    </section>
-    <section>
-      <h2>Exit ticket</h2>
-      <p>${escapeHtml(plan.reflectionPrompt)}</p>
-    </section>
-    <section>
-      <h2>Teacher facilitation notes</h2>
-      <ul>${plan.teacherTips.map((tip) => `<li>${escapeHtml(tip)}</li>`).join("")}</ul>
-    </section>
+      <aside class="hero-panel" aria-labelledby="objectives-title">
+        <p class="kicker">Learning path</p>
+        <h2 id="objectives-title">What students will be able to do</h2>
+        <ul class="objective-list">${plan.objectives.map((item) => `<li><button type="button" aria-pressed="false" data-objective-toggle>✓</button><span>${escapeHtml(item)}</span></li>`).join("")}</ul>
+      </aside>
+    </header>
+    <div class="stage">
+      ${
+        mediaItems.length
+          ? `<section class="lesson-band">
+        <div class="band-heading">
+          <div>
+            <p class="kicker">Watch and listen</p>
+            <h2>Anchor the idea visually</h2>
+          </div>
+          <p>Use the media first, then return to it during the explanation and practice.</p>
+        </div>
+        <div class="media-showcase">
+          ${mediaItems
+            .map((item) => {
+              if (item.modality === "image") {
+                return `<figure class="media-shell"><img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.alt)}" loading="lazy" /><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
+              }
+              if (item.modality === "video") {
+                return `<figure class="media-shell"><video src="${escapeHtml(item.url)}" controls playsinline preload="metadata"><track kind="captions" /></video><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
+              }
+              return `<figure class="media-shell"><audio src="${escapeHtml(item.url)}" controls preload="none"><track kind="captions" /></audio><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
+            })
+            .join("")}
+        </div>
+      </section>`
+          : ""
+      }
+      <section class="lesson-band">
+        <div class="band-heading">
+          <div>
+            <p class="kicker">Teaching flow</p>
+            <h2>Move from curiosity to practice</h2>
+          </div>
+          <p>Each beat pairs teacher narration with an action students can take.</p>
+        </div>
+        <div class="talk-track">
+          ${plan.lectureScript
+            .map(
+              (item, index) => `<article class="script-beat">
+            <span class="beat-number">${index + 1}</span>
+            <div>
+              <p class="kicker">${escapeHtml(item.segment)}</p>
+              <h3>${escapeHtml(item.title)}</h3>
+              <p><strong>Teacher says:</strong> ${escapeHtml(item.teacherNarration)}</p>
+              <p><strong>Students do:</strong> ${escapeHtml(item.studentAction)}</p>
+            </div>
+          </article>`
+            )
+            .join("")}
+        </div>
+      </section>
+      <section class="lesson-band">
+        <div class="band-heading">
+          <div>
+            <p class="kicker">Core ideas</p>
+            <h2>Vocabulary and explanation</h2>
+          </div>
+          <p>Introduce the terms beside the sequence of ideas so students can connect names to meaning.</p>
+        </div>
+        <div class="concept-grid">
+          <aside class="vocab-panel">
+            <h3>Key vocabulary</h3>
+            <ul class="vocab-cloud">${plan.keyVocabulary.map((item) => `<li><span class="term">${escapeHtml(item.term)}</span>${escapeHtml(item.definition)}</li>`).join("")}</ul>
+          </aside>
+          <div class="explain-timeline">
+            ${plan.explanationSections.map((section, index) => `<article class="explain-step"><span class="step-tag">Step ${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><div class="lesson-copy">${escapeHtml(section.body)}</div></div></article>`).join("")}
+          </div>
+        </div>
+      </section>
+      <section class="lesson-band">
+        <div class="example-panel">
+          <div>
+            <p class="kicker">Worked example</p>
+            <h2>${escapeHtml(plan.workedExample.title)}</h2>
+          </div>
+          <div class="lesson-copy">${escapeHtml(plan.workedExample.body)}</div>
+        </div>
+      </section>
+      <section class="lesson-band">
+        <div class="band-heading">
+          <div>
+            <p class="kicker">Practice lab</p>
+            <h2>${escapeHtml(plan.activity.title)}</h2>
+          </div>
+          <p>${escapeHtml(plan.activity.instruction)}</p>
+        </div>
+        <ul class="activity-grid">
+          ${[
+            ...plan.activity.strongItems.map((item, index) => ({
+              id: `strong-${index + 1}`,
+              label: item,
+              answer: "strong",
+            })),
+            ...plan.activity.weakItems.map((item, index) => ({
+              id: `weak-${index + 1}`,
+              label: item,
+              answer: "weak",
+            })),
+          ]
+            .map(
+              (
+                item
+              ) => `<li class="activity-card" data-classify-card data-answer="${item.answer}">
+                <span class="term">${escapeHtml(item.label)}</span>
+                <div class="choice-row">
+                  <button type="button" data-classify-choice="${item.id}:strong">${escapeHtml(plan.activity.strongFitLabel)}</button>
+                  <button type="button" data-classify-choice="${item.id}:weak">${escapeHtml(plan.activity.weakFitLabel)}</button>
+                </div>
+                <p data-classify-result></p>
+              </li>`
+            )
+            .join("")}
+        </ul>
+      </section>
+      <section class="lesson-band">
+        <div class="band-heading">
+          <div>
+            <p class="kicker">Quick check</p>
+            <h2>${escapeHtml(plan.quiz.title)}</h2>
+          </div>
+          <p>Students get immediate feedback and can use the explanation to revise their reasoning.</p>
+        </div>
+        <div class="quiz-grid">
+          ${plan.quiz.items
+            .map(
+              (item, index) => `<article class="quiz-card">
+            <p class="kicker">Question ${index + 1}</p>
+            <h3>${escapeHtml(item.stem)}</h3>
+            <div class="choices">${item.choices.map((choice) => `<button type="button" data-quiz-choice>${escapeHtml(choice)}</button>`).join("")}</div>
+            <p data-quiz-feedback></p>
+            <p class="answer-line"><strong>Answer:</strong> <span data-quiz-answer>${escapeHtml(item.answer)}</span></p>
+            <p>${escapeHtml(item.explanation)}</p>
+          </article>`
+            )
+            .join("")}
+        </div>
+      </section>
+      <section class="lesson-band">
+        <div class="reflection-grid">
+          <div class="reflection-panel">
+            <p class="kicker">Exit ticket</p>
+            <h2>Reflect</h2>
+            <p>${escapeHtml(plan.reflectionPrompt)}</p>
+          </div>
+          <aside class="teacher-notes">
+            <p class="kicker">Teacher notes</p>
+            <h2>Facilitation moves</h2>
+            <ul>${plan.teacherTips.map((tip) => `<li>${escapeHtml(tip)}</li>`).join("")}</ul>
+          </aside>
+        </div>
+      </section>
+    </div>
   </main>
+  <script type="application/json" id="lesson-data">${jsonForHtml(runtimeData)}</script>
   <script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(runtimeScript ?? "")}</script>
 </body>
 </html>`;

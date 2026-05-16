@@ -105,6 +105,7 @@ Tasks:
 
 - `[~]` Tavily: show source titles, excerpts, links, retrieved time, and block associations in the sources drawer. Citations are inspectable; block associations remain limited.
 - `[ ]` Pioneer/GLiNER2: surface extracted terms or entities in a visible lesson block or metadata panel.
+- `[~]` Pioneer/GLiNER2: extract broader sandbox schema data when useful, including processes, objects, relationships, measurements, people, and places.
 - `[x]` fal: improve image prompt construction per block and store prompt/model/job provenance.
 - `[x]` fal retry: keep failed media blocks in place and retry only that block.
 - `[~]` LLM: validate model output with Zod and repair or fallback deterministically when invalid. Validation/fallback exists; invalid-output repair needs review.
@@ -124,6 +125,7 @@ Tasks:
 
 - `[x]` Review `LessonPageShell`, quiz runtime, activity runtime, reflection prompts, and sandboxed frame behavior.
 - `[~]` Ensure every generated node type has a polished student-facing renderer. Current schema node types render; generated sandbox and structured fixture paths still need consolidation.
+- `[~]` Raise generated sandboxed HTML/JavaScript quality toward the bundled solar-system demo: topic-specific interactive modules, responsive visual hierarchy, safe inline JavaScript, meaningful animation, and schema-driven interactions.
 - `[ ]` Add keyboard and basic accessibility coverage for quiz/activity interactions.
 - `[~]` Validate sandboxed HTML output in `src/lib/lesson/html-artifact.ts` before saving.
 - `[x]` Add graceful handling for missing media assets and unsafe URLs.
@@ -202,10 +204,11 @@ Acceptance:
 2. Generation loop tests and provider failure hardening.
 3. Canvas editing through patch operations.
 4. Student runtime polish.
-5. Student interaction tracking.
-6. Voice command and quick-action editing.
-7. Export and demo mode.
-8. Full QA and documentation.
+5. High-quality generated sandbox HTML/JavaScript with Pioneer/GLiNER2 schema data available to the runtime.
+6. Student interaction tracking.
+7. Voice command and quick-action editing.
+8. Export and demo mode.
+9. Full QA and documentation.
 
 This order keeps the core product usable at every step. Voice and PDF export are high-impact polish, but persistence, structured editing, and a reliable share page are the backbone.
 
@@ -232,6 +235,7 @@ Can cut if time is tight:
 
 - Should persistence require Postgres for the demo, or should localStorage remain a first-class fallback?
 - Should the canonical student output be structured React rendering, sandboxed HTML, or both?
+- Should generated sandbox runtimes be LLM-authored JavaScript enhancements over a validated HTML shell, or should the LLM produce a full validated HTML artifact for non-solar lessons?
 - Which one hero demo topic should have fully rehearsed fallback assets?
 - Is auth needed before judging, or are anonymous generated lesson IDs acceptable?
 - Should SLNG TTS be used for only one polished moment or throughout the session?

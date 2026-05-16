@@ -447,6 +447,9 @@ function isUnsafeBrowserRuntimeScript(code: string) {
     /<\/script\b/i.test(code) ||
     /\beval\s*\(/i.test(code) ||
     /\bFunction\s*\(/.test(code) ||
+    /\.innerHTML\b/i.test(code) ||
+    /\.outerHTML\b/i.test(code) ||
+    /\binsertAdjacentHTML\s*\(/i.test(code) ||
     /\bdocument\.write\s*\(/i.test(code) ||
     /\bfetch\s*\(/i.test(code) ||
     /\bXMLHttpRequest\b/i.test(code) ||
@@ -507,17 +510,28 @@ if (root) {
 export async function generateLessonRuntimeScript(input: {
   prompt: string;
   plan: LessonPlan;
+  entities?: ExtractedEntity[];
   env: AppEnv;
 }): Promise<{ code: string; model: string; usedFallback: boolean }> {
+  const entityList =
+    input.entities
+      ?.slice(0, 24)
+      .map((e) => `${e.label} (${e.kind})`)
+      .join(", ") || "none";
   const result = await generateOpenAICode({
     env: input.env,
     prompt: [
-      "Create vanilla browser JavaScript for an embedded interactive lesson page.",
-      "The HTML already contains [data-runtime='static-lesson'], [data-objective-toggle], [data-quiz-choice], [data-quiz-answer], [data-quiz-feedback], [data-classify-card], [data-classify-choice], and [data-classify-result].",
-      "There may be multiple quiz article elements. When a choice is clicked, compare it only with the [data-quiz-answer] inside the closest article.",
+      "Create vanilla browser JavaScript for an embedded sandboxed lesson page.",
+      "Target the quality bar of the bundled solar system demo in this repository: polished visual hierarchy, topic-specific interaction, responsive layout, meaningful motion, clear feedback, and classroom-safe copy.",
+      "The HTML already contains [data-runtime='static-lesson'], [data-objective-toggle], [data-quiz-choice], [data-quiz-answer], [data-quiz-feedback], [data-classify-card], [data-classify-choice], and [data-classify-result]. It also contains <script type='application/json' id='lesson-data'> with { plan, media, schemaData }.",
+      "The base sandbox is already arranged as a colorful guided lesson with .lesson-hero, .media-showcase, .talk-track, .concept-grid, .explain-timeline, .activity-grid, .quiz-grid, and .reflection-grid. Enhance those regions or insert one high-value interactive module near the relevant section; do not flatten the page into generic white cards or repeated rows.",
+      "You may enhance the static lesson by creating additional sandbox HTML with document.createElement, CSS injected through a <style> element, SVG elements, Canvas 2D, timers, requestAnimationFrame, and DOM event listeners.",
+      "Use Pioneer / GLiNER2 schemaData entities when they help build a concept map, process simulator, timeline, sorting lab, vocabulary hotspot, measurement comparison, or relationship visualization.",
+      "Keep the existing objective toggles, quiz choices, and classification cards working. There may be multiple quiz article elements; compare a choice only with the [data-quiz-answer] inside the closest article.",
       "For classification, compare the picked value after ':' in data-classify-choice with the closest card's data-answer and write feedback into that card's [data-classify-result].",
-      "Requirements: no imports, no network calls, no storage, no eval, no document.write. Use DOM APIs only. Keep it under 200 lines.",
+      "Requirements: no imports, no network calls, no storage, no eval, no Function constructor, no document.write, no innerHTML/outerHTML/insertAdjacentHTML. Use DOM APIs and textContent. Keep it under 360 lines.",
       `Teacher transcript:\n${input.prompt}`,
+      `Extracted schema entities:\n${entityList}`,
       `Lesson plan:\n${JSON.stringify(input.plan)}`,
     ].join("\n\n---\n\n"),
   });

@@ -196,13 +196,22 @@ describe("sandboxed lesson HTML", () => {
           alt: "Animation showing photosynthesis over time.",
         },
       },
+      schemaData: {
+        provider: "pioneer-gliner2",
+        entities: [
+          { label: "photosynthesis", kind: "process" },
+          { label: "chlorophyll", kind: "term" },
+        ],
+      },
       runtimeScript:
         "document.querySelector('[data-quiz-feedback]').textContent = 'Ready';",
     });
 
     expect(artifact.spec.kind).toBe("static-lesson");
     expect(artifact.html).toContain('data-runtime="static-lesson"');
+    expect(artifact.html).toContain('id="lesson-data"');
     expect(artifact.html).toContain('id="lesson-runtime-script"');
+    expect(artifact.html).toContain("pioneer-gliner2");
     expect(artifact.html).toContain("data-quiz-choice");
     expect(artifact.html).toContain("data-classify-choice");
     expect(artifact.html).toContain("photosynthesis.png");

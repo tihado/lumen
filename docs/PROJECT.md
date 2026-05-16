@@ -411,7 +411,7 @@ flowchart LR
 | **2. Intent parsing**       | Transcript             | `LessonBrief`                                   | Converts natural language into constraints: topic, grade, duration, language, style. |
 | **3. Research planning**    | `LessonBrief`          | Tavily query set                                | Searches should be purposeful, not one generic query.                                |
 | **4. Source retrieval**     | Query set              | Ranked source cards                             | Creates factual grounding and references.                                            |
-| **5. Extraction**           | Transcript + excerpts  | Concepts, people, places, terms, misconceptions | Pioneer / GLiNER2 creates structured slots for lesson building.                      |
+| **5. Extraction**           | Transcript + excerpts  | Concepts, people, places, terms, misconceptions, processes, objects, relationships, measurements | Pioneer / GLiNER2 creates structured slots for lesson building and sandbox interactions. |
 | **6. Pedagogical planning** | Brief + entities       | Learning path                                   | Decides sequence: hook, explanation, examples, practice, quiz, reflection.           |
 | **7. Media planning**       | Learning path          | Image/video prompts                             | Generates assets that serve a teaching goal, not decoration.                         |
 | **8. Canvas patching**      | Lesson schema + assets | Incremental UI patches                          | The teacher sees progress while long tasks continue.                                 |
@@ -543,6 +543,7 @@ For the **lesson creation workspace**, the server orchestrator SHOULD stream **d
 | `canvas_init`   | `{ elements: … }`     | Skeleton canvas: blocks with placeholders, prompts, and **stable block ids**. |
 | `canvas_patch`  | `{ patch: … }`        | Optional incremental JSON Patch for late-arriving text tweaks. |
 | `media`         | `{ blockId, type, url?, status?, error? }` | Per-block fal completion or failure. |
+| `runtime`       | `{ mode: "sandboxed_html", schemaData?, status }` | Generated or fallback sandbox HTML/JavaScript runtime is ready to persist. |
 | `error`         | `{ code, message, recoverable? }` | User-visible or toast; client may fall back to typed flow. |
 | `done`          | `{}` or `{ lessonId }` | Run complete; client may trigger TTS summary. |
 
@@ -594,6 +595,8 @@ Student runtime components:
 - **`ActivityRuntime`**: drag/drop, ordering, matching, classification, or short response.
 - **`ReflectionPrompt`**: captures open-ended response.
 - **`SourcePopover`**: shows short citations when factual claims need trust.
+
+Generated lessons may also publish a sandboxed HTML artifact. The sandbox shell should include safe lesson JSON (`lesson-data`) and may run LLM-authored vanilla JavaScript that creates additional DOM, CSS, SVG, or Canvas 2D interactions. The quality bar is the bundled solar-system demo: topic-specific visualization, responsive layout, meaningful animation, immediate feedback, and no network/storage/import/eval behavior. Pioneer / GLiNER2 schema data should be available to that runtime when it can drive a concept map, process simulator, timeline, sorting lab, vocabulary hotspot, measurement comparison, or relationship visualization.
 
 Teacher edit components and student runtime components should share schema types but not UI state. This avoids leaking draft-only controls into the public lesson.
 
@@ -842,7 +845,7 @@ The system should avoid complex games in the first version. Simple interactions 
 2. **Student website renderer:** render a sample `LessonDocument` at `/lesson/[lessonId]` before adding AI.
 3. **Text-only generation path:** transcript in → lesson plan out → blocks + interactions.
 4. **Add Tavily:** citations pane + grounded text blocks.
-5. **Add extraction:** Pioneer/GLiNER2 fills structured slots; compare with LLM-only baseline.
+5. **Add extraction:** Pioneer/GLiNER2 fills structured lesson and sandbox-runtime slots; compare with LLM-only baseline.
 6. **Add fal:** image per section; then video where time allows.
 7. **Add SLNG:** replace typed transcript with real voice for demo path.
 8. **Publish flow:** teacher clicks “Publish as website” and receives a shareable lesson URL.

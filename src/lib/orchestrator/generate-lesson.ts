@@ -437,10 +437,13 @@ export async function* generateLessonStream(input: {
     } else {
       entities = heuristicExtract(topic);
     }
+    const schemaDataProvider = pioneerFallback
+      ? ("heuristic" as const)
+      : ("pioneer-gliner2" as const);
     yield providerCompleted(
       s2,
       "pioneer",
-      `${entities.length} extracted slots`,
+      `${entities.length} extracted schema entities`,
       pioneerFallback
     );
 
@@ -973,7 +976,7 @@ export async function* generateLessonStream(input: {
     );
 
     const s8 = step();
-    yield providerStarted(s8, "llm", "Generate lesson JavaScript");
+    yield providerStarted(s8, "llm", "Generate sandbox HTML/JS runtime");
     let runtimeScript: string | undefined;
     let runtimeScriptDetail = "Solar system uses bundled runtime";
     let runtimeScriptUsedFallback = false;
@@ -983,12 +986,13 @@ export async function* generateLessonStream(input: {
           const generatedScript = await generateLessonRuntimeScript({
             prompt: input.transcript,
             plan: lessonPlan,
+            entities,
             env: input.env,
           });
           runtimeScript = generatedScript.code;
           runtimeScriptDetail = generatedScript.usedFallback
             ? `Validated fallback after OpenAI ${generatedScript.model}`
-            : `Generated inline JS via OpenAI ${generatedScript.model}`;
+            : `Generated sandbox HTML/JS via OpenAI ${generatedScript.model}`;
           runtimeScriptUsedFallback = generatedScript.usedFallback;
         } catch {
           runtimeScript = fallbackLessonRuntimeScript();
@@ -1009,7 +1013,11 @@ export async function* generateLessonStream(input: {
     );
 
     const s9 = step();
-    yield providerStarted(s9, "orchestrator", "Persist sandboxed HTML lesson");
+    yield providerStarted(
+      s9,
+      "orchestrator",
+      "Assemble and persist sandboxed HTML lesson"
+    );
     const firstImage = generatedMedia.find(
       (item) => item.node.modality === "image"
     );
@@ -1067,11 +1075,15 @@ export async function* generateLessonStream(input: {
             }
           : undefined,
       },
+      schemaData: {
+        provider: schemaDataProvider,
+        entities,
+      },
     });
     const persistCompleted = providerCompleted(
       s9,
       "orchestrator",
-      "Saved HTML lesson version to Postgres"
+      "Saved sandboxed HTML/JS lesson version to Postgres"
     );
     await saveLessonVersion({
       lessonId,

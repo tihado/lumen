@@ -61,13 +61,13 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
   1. create persisted lesson and generation run
   2. SLNG setup/readiness step
   3. Tavily search or fallback source cards
-  4. Pioneer extraction or heuristic extraction
+  4. Pioneer extraction or heuristic extraction for lesson and sandbox schema data
   5. OpenAI lesson plan or deterministic fallback plan
   6. materialize lesson nodes as patches
   7. fal image generation or fallback image
   8. fal queue-backed video generation or fallback video
   9. SLNG narration audio or failed audio state
-  10. generated or fallback sandboxed lesson JavaScript
+  10. generated or fallback sandboxed lesson HTML/JavaScript runtime
   11. persist sandboxed HTML lesson version
 - fal image/video retries are available from selected media blocks through `/api/media`.
 - fal video generation uses `queue.fal.run` polling with a 175s local deadline and a 180s `/api/media` route duration budget.
@@ -153,14 +153,14 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
 
 - Provider boundaries are visible in readiness badges and timeline rows.
 - Tavily citations are stored and displayed, but block-level source associations are limited.
-- Pioneer/GLiNER2 output influences fallback/LLM planning, but extracted entities are not shown as a first-class visible metadata panel.
+- Pioneer/GLiNER2 output influences fallback/LLM planning and is now available to generated sandbox runtimes as schema data, but extracted entities are not shown as a first-class visible metadata panel.
 - fal image generation uses direct fal model calls; fal video generation now uses queue submit/status/result polling. Provenance is stored, but retry provenance is simplified client-side.
 - LLM lesson planning validates through provider code and schema boundaries, but invalid-output repair behavior should be reviewed before demo.
 
 ### Student lesson runtime
 
 - The structured React runtime handles current schema node types and renders media nodes as image, video, or audio based on modality.
-- Generated persisted lessons use sandboxed HTML, so the structured React runtime and sandboxed generated runtime are both active paths.
+- Generated persisted lessons use sandboxed HTML. Non-solar lessons expose a `lesson-data` JSON payload and LLM-authored safe JavaScript can enhance the validated static shell with topic-specific HTML, CSS, canvas/SVG, and schema-driven interactions.
 - Student interaction events are not persisted.
 - Quiz/activity accessibility and keyboard coverage have not been verified.
 - Missing media gracefully shows fallback text in the structured runtime.
@@ -190,6 +190,7 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
 - **Database is mandatory for generation.** The plan's "no-key local run creates a usable fallback lesson" is only true if Postgres is configured.
 - **Teacher edits are not durable.** Local canvas edits can be lost when opening the persisted lesson.
 - **Two student rendering paths exist.** Demo fixture uses structured React rendering; generated lessons use sandboxed HTML. This is workable for a demo but should be documented as an intentional architecture choice or consolidated.
+- **Generated sandbox quality is prompt-dependent.** The orchestrator now asks for solar-demo-level sandbox HTML/JavaScript enhancements, but visual verification still needs a manual or browser smoke pass.
 - **Voice story is still mostly fallback.** Browser dictation helps, but SLNG is not yet the primary client voice session.
 - **fal video can still fall back under real provider failure.** The queue path fixes direct-request timeout behavior, but content policy failures, exhausted credentials, provider outage, or jobs exceeding the local timeout still return the demo video.
 - **README is stale in one place.** It mentions a localStorage publish preview, but current code persists generated lessons through Postgres.

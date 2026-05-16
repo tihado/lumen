@@ -47,7 +47,19 @@ describe("pioneerExtract", () => {
     expect(JSON.parse(String(request.body))).toEqual({
       model_id: "fastino/gliner2-base-v1",
       text: "Teach photosynthesis",
-      schema: { entities: ["concept", "term", "misconception"] },
+      schema: {
+        entities: [
+          "concept",
+          "term",
+          "misconception",
+          "process",
+          "object",
+          "relationship",
+          "measurement",
+          "person",
+          "place",
+        ],
+      },
       threshold: 0.35,
     });
     expect(result).toEqual([

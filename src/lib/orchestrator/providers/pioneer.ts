@@ -2,17 +2,59 @@ import type { AppEnv } from "@/lib/env";
 
 export type ExtractedEntity = {
   label: string;
-  kind: "concept" | "term" | "misconception" | "other";
+  kind:
+    | "concept"
+    | "term"
+    | "misconception"
+    | "process"
+    | "object"
+    | "relationship"
+    | "measurement"
+    | "person"
+    | "place"
+    | "other";
   span?: string;
 };
 
 const DEFAULT_PIONEER_MODEL = "fastino/gliner2-base-v1";
-const PIONEER_ENTITY_LABELS = ["concept", "term", "misconception"];
+const PIONEER_ENTITY_LABELS = [
+  "concept",
+  "term",
+  "misconception",
+  "process",
+  "object",
+  "relationship",
+  "measurement",
+  "person",
+  "place",
+];
 
 function normalizeKind(value: unknown): ExtractedEntity["kind"] {
   const normalized = String(value ?? "").toLowerCase();
   if (normalized.includes("misconception")) {
     return "misconception";
+  }
+  if (normalized.includes("process") || normalized.includes("step")) {
+    return "process";
+  }
+  if (normalized.includes("relationship") || normalized.includes("relation")) {
+    return "relationship";
+  }
+  if (
+    normalized.includes("measurement") ||
+    normalized.includes("metric") ||
+    normalized.includes("quantity")
+  ) {
+    return "measurement";
+  }
+  if (normalized.includes("person") || normalized.includes("people")) {
+    return "person";
+  }
+  if (normalized.includes("place") || normalized.includes("location")) {
+    return "place";
+  }
+  if (normalized.includes("object") || normalized.includes("item")) {
+    return "object";
   }
   if (normalized.includes("concept")) {
     return "concept";
