@@ -3,6 +3,7 @@ import type { LessonPlan } from "@/lib/orchestrator/providers/llm";
 
 const MAX_HTML_LENGTH = 180_000;
 const SOLAR_RUNTIME_SRC = "/lesson-runtime/solar-system.v1.js";
+const EMBEDDED_RUNTIME_SCRIPT_ID = "lesson-runtime-script";
 
 const planetSchema = z.object({
   id: z.string(),
@@ -33,6 +34,7 @@ export const sandboxedLessonSpecSchema = z.object({
       answer: z.string(),
     })
     .optional(),
+  studio: z.unknown().optional(),
 });
 
 export type SandboxedLessonSpec = z.infer<typeof sandboxedLessonSpecSchema>;
@@ -194,6 +196,10 @@ function jsonForHtml(value: unknown) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
+function scriptForHtml(value: string) {
+  return value.replace(/<\/script/gi, "<\\/script");
+}
+
 function isSolarSystemPrompt(prompt: string) {
   const lower = prompt.toLowerCase();
   return lower.includes("solar system");
@@ -202,6 +208,7 @@ function isSolarSystemPrompt(prompt: string) {
 export function createSandboxedLessonArtifact(input: {
   prompt: string;
   plan: LessonPlan;
+  runtimeScript?: string;
 }): SandboxedLessonArtifact {
   const spec: SandboxedLessonSpec = isSolarSystemPrompt(input.prompt)
     ? {
@@ -236,7 +243,7 @@ export function createSandboxedLessonArtifact(input: {
   const html =
     spec.kind === "solar-system"
       ? createSolarSystemHtml(spec)
-      : createStaticLessonHtml(input.plan, spec);
+      : createStaticLessonHtml(input.plan, spec, input.runtimeScript);
   validateSandboxedLessonHtml(html);
   return { title: spec.title, html, spec };
 }
@@ -307,14 +314,14 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
       <div class="scene-wrap" data-runtime="solar-system">
         <canvas id="solar-canvas" aria-label="3D solar system simulation"></canvas>
         <div class="toolbar">
-          <span class="hint">Drag to rotate · Scroll to zoom · Click a planet</span>
+          <span class="hint">Drag to rotate · Scroll to zoom · Click the Sun or a planet</span>
           <button class="reset" id="reset-view" type="button">Overview</button>
         </div>
       </div>
       <aside>
         <p class="kicker">Selected view</p>
         <h2 class="planet-title" id="planet-name">Overview</h2>
-        <p class="planet-description" id="planet-description">Click a planet to zoom in and read detailed information.</p>
+        <p class="planet-description" id="planet-description">Click the Sun or a planet to zoom in and read detailed information.</p>
         <dl>
           <dt>Diameter</dt><dd id="planet-diameter">—</dd>
           <dt>Distance</dt><dd id="planet-distance">—</dd>
@@ -339,7 +346,11 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
 </html>`;
 }
 
-function createStaticLessonHtml(plan: LessonPlan, spec: SandboxedLessonSpec) {
+function createStaticLessonHtml(
+  plan: LessonPlan,
+  spec: SandboxedLessonSpec,
+  runtimeScript?: string
+) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -352,6 +363,16 @@ function createStaticLessonHtml(plan: LessonPlan, spec: SandboxedLessonSpec) {
     h1 { font-size: clamp(34px, 6vw, 64px); line-height: 1; letter-spacing: 0; margin: 0 0 18px; }
     section { border-top: 1px solid #cbd5e1; padding: 26px 0; }
     p, li { line-height: 1.65; }
+    button { border: 1px solid #94a3b8; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; font: inherit; font-weight: 700; padding: 10px 12px; }
+    button:hover { border-color: #0f766e; }
+    .objective-list { display: grid; gap: 10px; padding: 0; list-style: none; }
+    .objective-list li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+    .objective-list button { height: 28px; width: 28px; padding: 0; line-height: 1; }
+    .objective-list button.is-complete { background: #0f766e; border-color: #0f766e; color: #fff; }
+    .choices { display: flex; flex-wrap: wrap; gap: 10px; }
+    [data-quiz-choice].is-correct { border-color: #15803d; background: #dcfce7; color: #14532d; }
+    [data-quiz-choice].is-wrong { border-color: #b91c1c; background: #fee2e2; color: #7f1d1d; }
+    [data-quiz-feedback] { font-weight: 700; }
     .kicker { color: #0f766e; font-size: 12px; text-transform: uppercase; letter-spacing: .16em; font-weight: 800; }
   </style>
 </head>
@@ -362,7 +383,7 @@ function createStaticLessonHtml(plan: LessonPlan, spec: SandboxedLessonSpec) {
     <p>${escapeHtml(plan.hookBody)}</p>
     <section>
       <h2>Learning objectives</h2>
-      <ul>${plan.objectives.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      <ul class="objective-list">${plan.objectives.map((item) => `<li><button type="button" aria-pressed="false" data-objective-toggle>✓</button><span>${escapeHtml(item)}</span></li>`).join("")}</ul>
     </section>
     <section>
       <h2>Explanation</h2>
@@ -371,9 +392,13 @@ function createStaticLessonHtml(plan: LessonPlan, spec: SandboxedLessonSpec) {
     <section>
       <h2>${escapeHtml(plan.quiz.title)}</h2>
       <p>${escapeHtml(plan.quiz.stem)}</p>
-      <p><strong>Answer:</strong> ${escapeHtml(plan.quiz.answer)}</p>
+      <div class="choices">${plan.quiz.choices.map((choice) => `<button type="button" data-quiz-choice>${escapeHtml(choice)}</button>`).join("")}</div>
+      <p data-quiz-feedback></p>
+      <p><strong>Answer:</strong> <span data-quiz-answer>${escapeHtml(plan.quiz.answer)}</span></p>
+      <p>${escapeHtml(plan.quiz.explanation)}</p>
     </section>
   </main>
+  <script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(runtimeScript ?? "")}</script>
 </body>
 </html>`;
 }
@@ -409,6 +434,9 @@ export function validateSandboxedLessonHtml(html: string) {
     const type = tag.match(/\stype=["']([^"']+)["']/i)?.[1];
     const id = tag.match(/\sid=["']([^"']+)["']/i)?.[1];
     if (!src && type === "application/json" && id === "lesson-data") {
+      continue;
+    }
+    if (!src && type === "module" && id === EMBEDDED_RUNTIME_SCRIPT_ID) {
       continue;
     }
     if (src === SOLAR_RUNTIME_SRC && type === "module") {

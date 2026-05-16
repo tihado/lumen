@@ -3,7 +3,7 @@
 import { ExternalLink, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CanvasWorkspace } from "@/components/canvas/CanvasWorkspace";
 import { SourcesDrawer } from "@/components/canvas/SourcesDrawer";
 import { Badge } from "@/components/ui/badge";
@@ -19,30 +19,64 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { VoiceSessionController } from "@/components/voice/VoiceSessionController";
 import { applyLessonPatch } from "@/lib/lesson/patches";
-import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
+import {
+  type LessonDocument,
+  type LessonNode,
+  safeParseLessonDocument,
+} from "@/lib/lesson/schema";
 import {
   type ProviderReadiness,
   parseStreamEventLine,
+  type StudioTimelineRow,
 } from "@/lib/orchestrator/stream-events";
 import { cn } from "@/lib/utils";
 
-type TimelineRow = {
-  key: string;
-  provider: string;
-  label: string;
-  status: "started" | "completed" | "failed";
-  detail?: string;
-  usedFallback?: boolean;
+type StudioState = {
+  lesson: LessonDocument;
+  timeline: StudioTimelineRow[];
+  transcript?: string;
 };
 
-export function StudioClient() {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readStudioState(value: unknown): StudioState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const studio = isRecord(value.studio) ? value.studio : null;
+  if (!studio) {
+    return null;
+  }
+  const lesson = studio.lesson;
+  const parsedLesson = safeParseLessonDocument(lesson);
+  if (!parsedLesson.success) {
+    return null;
+  }
+  const timeline = Array.isArray(studio.timeline)
+    ? (studio.timeline.filter(isRecord) as StudioTimelineRow[])
+    : [];
+  return {
+    lesson: parsedLesson.data,
+    timeline,
+    transcript:
+      typeof studio.transcript === "string" ? studio.transcript : undefined,
+  };
+}
+
+export function StudioClient({
+  initialLessonId,
+}: {
+  initialLessonId?: string;
+}) {
   const router = useRouter();
   const [transcript, setTranscript] = useState(
     "I want to learn about the solar system"
   );
   const [lesson, setLesson] = useState<LessonDocument | null>(null);
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
-  const [timeline, setTimeline] = useState<TimelineRow[]>([]);
+  const [timeline, setTimeline] = useState<StudioTimelineRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -64,7 +98,47 @@ export function StudioClient() {
     ));
   }, [readiness]);
 
-  const pushTimeline = useCallback((row: TimelineRow) => {
+  useEffect(() => {
+    if (!initialLessonId) {
+      return;
+    }
+    let cancelled = false;
+    async function loadStudioState() {
+      setError(null);
+      try {
+        const res = await fetch(`/api/lessons/${initialLessonId}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          throw new Error(`Could not load lesson ${initialLessonId}`);
+        }
+        const payload = (await res.json()) as {
+          version?: { spec?: unknown } | null;
+        };
+        const state = readStudioState(payload.version?.spec);
+        if (!(state && !cancelled)) {
+          throw new Error("This lesson does not have saved Studio state yet.");
+        }
+        setLesson(state.lesson);
+        setTimeline(state.timeline);
+        setTranscript(state.transcript ?? state.lesson.title);
+        setSavedLessonId(state.lesson.id);
+        setSelectedId(null);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      }
+    }
+    loadStudioState().catch(() => {
+      /* error state is handled above */
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialLessonId]);
+
+  const pushTimeline = useCallback((row: StudioTimelineRow) => {
     setTimeline((prev) => {
       const idx = prev.findIndex((r) => r.key === row.key);
       if (idx === -1) {
@@ -72,7 +146,7 @@ export function StudioClient() {
       }
       const prevRow = prev[idx];
       const merged = { ...prevRow, ...row };
-      if (!row.label && prevRow.label) {
+      if (!(row.label.length > 0) && prevRow.label) {
         merged.label = prevRow.label;
       }
       const next = [...prev];
@@ -93,7 +167,7 @@ export function StudioClient() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript, lessonId: savedLessonId }),
       });
       if (!(res.ok && res.body)) {
         const t = await res.text();
@@ -156,7 +230,7 @@ export function StudioClient() {
     } finally {
       setBusy(false);
     }
-  }, [pushTimeline, router, transcript]);
+  }, [pushTimeline, router, savedLessonId, transcript]);
 
   const onReplaceNode = useCallback((node: LessonNode) => {
     setLesson((prev) => {

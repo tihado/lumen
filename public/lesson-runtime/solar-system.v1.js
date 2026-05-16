@@ -10,6 +10,21 @@ if (!(dataEl && canvas && root)) {
 
 const lesson = JSON.parse(dataEl.textContent || "{}");
 const planets = Array.isArray(lesson.planets) ? lesson.planets : [];
+const sunInfo = {
+  id: "sun",
+  name: "Sun",
+  radius: 1.8,
+  description:
+    "The star at the center of the solar system. Its gravity holds the planets in orbit, and its energy powers weather, climate, and most life on Earth.",
+  facts: [
+    "The Sun contains about 99.8% of all mass in the solar system.",
+    "Light from the Sun takes about 8 minutes and 20 seconds to reach Earth.",
+    "Its core turns hydrogen into helium through nuclear fusion.",
+  ],
+  diameter: "1.39 million km",
+  distanceFromSun: "Center of the system",
+  orbitalPeriod: "About 25-35 days rotation",
+};
 
 const runtimeStyles = document.createElement("style");
 runtimeStyles.textContent = `
@@ -145,6 +160,82 @@ const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
+function createSunSurfaceTexture() {
+  const canvasEl = document.createElement("canvas");
+  canvasEl.width = 768;
+  canvasEl.height = 384;
+  const context = canvasEl.getContext("2d");
+  const gradient = context.createLinearGradient(0, 0, 768, 384);
+  gradient.addColorStop(0, "#fff3a3");
+  gradient.addColorStop(0.28, "#ffd166");
+  gradient.addColorStop(0.62, "#ff8f1f");
+  gradient.addColorStop(1, "#f4511e");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 768, 384);
+
+  for (let y = -28; y < 420; y += 18) {
+    context.globalAlpha = 0.18;
+    context.fillStyle = y % 54 === 0 ? "#fff7b8" : "#e85d04";
+    context.beginPath();
+    context.moveTo(0, y);
+    for (let x = 0; x <= 768; x += 24) {
+      context.lineTo(
+        x,
+        y +
+          Math.sin(x * 0.022 + y * 0.035) * 9 +
+          Math.cos(x * 0.043 + y * 0.017) * 5
+      );
+    }
+    for (let x = 768; x >= 0; x -= 24) {
+      context.lineTo(
+        x,
+        y +
+          19 +
+          Math.cos(x * 0.018 + y * 0.04) * 8 +
+          Math.sin(x * 0.037) * 4
+      );
+    }
+    context.closePath();
+    context.fill();
+  }
+
+  for (let i = 0; i < 180; i += 1) {
+    const x = (Math.sin(i * 93.13) * 0.5 + 0.5) * 768;
+    const y = (Math.cos(i * 51.71) * 0.5 + 0.5) * 384;
+    const radius = 4 + (Math.sin(i * 19.19) * 0.5 + 0.5) * 18;
+    const spot = context.createRadialGradient(x, y, 0, x, y, radius);
+    spot.addColorStop(0, "rgba(255, 247, 168, .5)");
+    spot.addColorStop(0.42, "rgba(255, 180, 64, .24)");
+    spot.addColorStop(1, "rgba(164, 42, 12, 0)");
+    context.fillStyle = spot;
+    context.globalAlpha = 0.45;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  context.globalAlpha = 1;
+  const texture = new THREE.CanvasTexture(canvasEl);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+}
+
+function createRadialFlareTexture(innerColor, outerColor) {
+  const canvasEl = document.createElement("canvas");
+  canvasEl.width = 512;
+  canvasEl.height = 512;
+  const context = canvasEl.getContext("2d");
+  const gradient = context.createRadialGradient(256, 256, 22, 256, 256, 256);
+  gradient.addColorStop(0, innerColor);
+  gradient.addColorStop(0.36, outerColor);
+  gradient.addColorStop(1, "rgba(255, 106, 0, 0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 512, 512);
+  return new THREE.CanvasTexture(canvasEl);
+}
+
 const ambient = new THREE.AmbientLight(0x8a_a4_d6, 0.82);
 scene.add(ambient);
 
@@ -155,10 +246,18 @@ scene.add(rimLight);
 const sunLight = new THREE.PointLight(0xff_d1_66, 12, 140);
 scene.add(sunLight);
 
+const sunSurfaceTexture = createSunSurfaceTexture();
 const sun = new THREE.Mesh(
-  new THREE.SphereGeometry(1.8, 48, 48),
-  new THREE.MeshBasicMaterial({ color: 0xff_c8_57, toneMapped: false })
+  new THREE.SphereGeometry(1.8, 72, 72),
+  new THREE.MeshBasicMaterial({
+    color: 0xff_d1_66,
+    map: sunSurfaceTexture,
+    toneMapped: false,
+  })
 );
+sun.userData.bodyId = sunInfo.id;
+sun.userData.body = sunInfo;
+sun.userData.surfaceTexture = sunSurfaceTexture;
 scene.add(sun);
 
 const sunGlow = new THREE.Mesh(
@@ -186,6 +285,38 @@ const outerSunGlow = new THREE.Mesh(
   })
 );
 scene.add(outerSunGlow);
+
+const sunCorona = new THREE.Sprite(
+  new THREE.SpriteMaterial({
+    map: createRadialFlareTexture(
+      "rgba(255, 248, 184, .72)",
+      "rgba(255, 132, 24, .26)"
+    ),
+    transparent: true,
+    opacity: 0.78,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  })
+);
+sunCorona.scale.set(7.4, 7.4, 1);
+scene.add(sunCorona);
+
+const sunAura = new THREE.Sprite(
+  new THREE.SpriteMaterial({
+    map: createRadialFlareTexture(
+      "rgba(255, 214, 102, .22)",
+      "rgba(251, 113, 33, .11)"
+    ),
+    transparent: true,
+    opacity: 0.54,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  })
+);
+sunAura.scale.set(12.5, 12.5, 1);
+scene.add(sunAura);
 
 const starGeometry = new THREE.BufferGeometry();
 const starPositions = [];
@@ -233,7 +364,9 @@ scene.add(
 
 const planetMeshes = new Map();
 const clickable = [];
+const orbitingPlanetMeshes = [];
 const orbitLines = [];
+clickable.push(sun);
 
 const selectedRing = new THREE.Mesh(
   new THREE.TorusGeometry(1, 0.025, 12, 128),
@@ -496,6 +629,7 @@ for (const planet of planets) {
   scene.add(mesh);
   planetMeshes.set(planet.id, mesh);
   clickable.push(mesh);
+  orbitingPlanetMeshes.push(mesh);
 
   const halo = new THREE.Mesh(
     new THREE.SphereGeometry(planet.radius * 1.08, 36, 36),
@@ -541,6 +675,7 @@ for (const planet of planets) {
 }
 
 let selectedId = null;
+let selectedType = null;
 let distance = 34;
 let theta = -0.85;
 let phi = 1.04;
@@ -558,12 +693,51 @@ const resetBtn = document.getElementById("reset-view");
 
 function setActiveButton() {
   for (const button of listEl?.querySelectorAll("button") || []) {
-    button.classList.toggle("active", button.dataset.planetId === selectedId);
+    button.classList.toggle("active", button.dataset.bodyId === selectedId);
   }
+}
+
+function updateDetails(body) {
+  if (nameEl) {
+    nameEl.textContent = body.name;
+  }
+  if (descriptionEl) {
+    descriptionEl.textContent = body.description;
+  }
+  if (diameterEl) {
+    diameterEl.textContent = body.diameter;
+  }
+  if (distanceEl) {
+    distanceEl.textContent = body.distanceFromSun;
+  }
+  if (periodEl) {
+    periodEl.textContent = body.orbitalPeriod;
+  }
+  if (factsEl) {
+    factsEl.innerHTML = "";
+    for (const fact of body.facts || []) {
+      const li = document.createElement("li");
+      li.textContent = fact;
+      factsEl.appendChild(li);
+    }
+  }
+}
+
+function selectSun() {
+  selectedId = sunInfo.id;
+  selectedType = "sun";
+  distance = 9;
+  desiredTarget.set(0, 0, 0);
+  selectedRing.material.opacity = 0.72;
+  selectedRing.scale.setScalar(sunInfo.radius * 1.85);
+  selectedRing.position.set(0, 0, 0);
+  updateDetails(sunInfo);
+  setActiveButton();
 }
 
 function selectPlanet(id) {
   selectedId = id;
+  selectedType = "planet";
   const planet = planets.find((item) => item.id === id);
   const mesh = planetMeshes.get(id);
   if (!(planet && mesh)) {
@@ -572,35 +746,14 @@ function selectPlanet(id) {
   distance = Math.max(planet.radius * 7, 7);
   selectedRing.material.opacity = 0.78;
   selectedRing.scale.setScalar(planet.radius * 1.75);
-  if (nameEl) {
-    nameEl.textContent = planet.name;
-  }
-  if (descriptionEl) {
-    descriptionEl.textContent = planet.description;
-  }
-  if (diameterEl) {
-    diameterEl.textContent = planet.diameter;
-  }
-  if (distanceEl) {
-    distanceEl.textContent = planet.distanceFromSun;
-  }
-  if (periodEl) {
-    periodEl.textContent = planet.orbitalPeriod;
-  }
-  if (factsEl) {
-    factsEl.innerHTML = "";
-    for (const fact of planet.facts || []) {
-      const li = document.createElement("li");
-      li.textContent = fact;
-      factsEl.appendChild(li);
-    }
-  }
+  updateDetails(planet);
   desiredTarget.copy(mesh.position);
   setActiveButton();
 }
 
 function resetView() {
   selectedId = null;
+  selectedType = null;
   distance = 34;
   desiredTarget.set(0, 0, 0);
   selectedRing.material.opacity = 0;
@@ -609,7 +762,7 @@ function resetView() {
   }
   if (descriptionEl) {
     descriptionEl.textContent =
-      "Click a planet to zoom in and read detailed information.";
+      "Click the Sun or a planet to zoom in and read detailed information.";
   }
   if (diameterEl) {
     diameterEl.textContent = "—";
@@ -628,10 +781,17 @@ function resetView() {
 }
 
 if (listEl) {
+  const sunButton = document.createElement("button");
+  sunButton.type = "button";
+  sunButton.dataset.bodyId = sunInfo.id;
+  sunButton.textContent = sunInfo.name;
+  sunButton.addEventListener("click", selectSun);
+  listEl.appendChild(sunButton);
+
   for (const planet of planets) {
     const button = document.createElement("button");
     button.type = "button";
-    button.dataset.planetId = planet.id;
+    button.dataset.bodyId = planet.id;
     button.textContent = planet.name;
     button.addEventListener("click", () => selectPlanet(planet.id));
     listEl.appendChild(button);
@@ -679,7 +839,9 @@ canvas.addEventListener("click", (event) => {
   pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObjects(clickable, false)[0];
-  if (hit?.object?.userData?.planetId) {
+  if (hit?.object?.userData?.bodyId === sunInfo.id) {
+    selectSun();
+  } else if (hit?.object?.userData?.planetId) {
     selectPlanet(hit.object.userData.planetId);
   }
 });
@@ -712,14 +874,19 @@ function animate(time) {
   sun.rotation.y += 0.0015 * dt;
   sunGlow.rotation.y -= 0.001 * dt;
   outerSunGlow.rotation.y += 0.0007 * dt;
+  sun.userData.surfaceTexture.offset.x = (sun.userData.surfaceTexture.offset.x + 0.00008 * dt) % 1;
   sunGlow.scale.setScalar(1 + Math.sin(time * 0.0018) * 0.018);
   outerSunGlow.scale.setScalar(1 + Math.cos(time * 0.0012) * 0.028);
+  sunCorona.material.opacity = 0.68 + Math.sin(time * 0.0014) * 0.08;
+  sunCorona.scale.setScalar(7.1 + Math.sin(time * 0.001) * 0.28);
+  sunAura.material.opacity = 0.42 + Math.cos(time * 0.0009) * 0.08;
+  sunAura.scale.setScalar(12.2 + Math.cos(time * 0.0007) * 0.45);
 
   for (const [index, orbit] of orbitLines.entries()) {
     orbit.material.opacity = 0.13 + Math.sin(time * 0.0007 + index) * 0.035;
   }
 
-  for (const mesh of clickable) {
+  for (const mesh of orbitingPlanetMeshes) {
     const planet = mesh.userData.planet;
     mesh.userData.angle += planet.orbitSpeed * (dt / 16);
     mesh.position.set(
@@ -737,7 +904,11 @@ function animate(time) {
     }
   }
 
-  if (selectedId) {
+  if (selectedType === "sun") {
+    selectedRing.position.set(0, 0, 0);
+    selectedRing.lookAt(camera.position);
+    selectedRing.rotation.z += 0.007 * (dt / 16);
+  } else if (selectedType === "planet" && selectedId) {
     const selected = planetMeshes.get(selectedId);
     if (selected) {
       desiredTarget.copy(selected.position);

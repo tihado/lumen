@@ -42,7 +42,23 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).toContain('data-runtime="solar-system"');
     expect(artifact.html).toContain('id="lesson-data"');
     expect(artifact.html).toContain("/lesson-runtime/solar-system.v1.js");
+    expect(artifact.html).toContain("Click the Sun or a planet");
     expect(artifact.html).toContain("Earth");
+  });
+
+  it("embeds generated JavaScript for static lessons", () => {
+    const artifact = createSandboxedLessonArtifact({
+      prompt: "I want to learn about photosynthesis",
+      plan: { ...plan, title: "Photosynthesis" },
+      runtimeScript:
+        "document.querySelector('[data-quiz-feedback]').textContent = 'Ready';",
+    });
+
+    expect(artifact.spec.kind).toBe("static-lesson");
+    expect(artifact.html).toContain('data-runtime="static-lesson"');
+    expect(artifact.html).toContain('id="lesson-runtime-script"');
+    expect(artifact.html).toContain("data-quiz-choice");
+    expect(artifact.html).toContain("Ready");
   });
 
   it("rejects unsupported scripts and inline handlers", () => {

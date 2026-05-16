@@ -1,10 +1,13 @@
+import Link from "next/link";
 import { LessonPageShell } from "@/components/lesson-runtime/LessonPageShell";
 import { SandboxedLessonFrame } from "@/components/lesson-runtime/SandboxedLessonFrame";
+import { buttonVariants } from "@/components/ui/button";
 import { demoLessonFixture } from "@/lib/lesson/fixtures";
 import {
   getLessonWithCurrentVersion,
   type PersistedLessonWithVersion,
 } from "@/lib/lesson/repository";
+import { cn } from "@/lib/utils";
 import { LessonPreviewClient } from "./lesson-preview-client";
 
 export const runtime = "nodejs";
@@ -32,10 +35,21 @@ export default async function LessonPage({
 
   if (persisted?.lesson.renderMode === "sandboxed_html" && persisted.version) {
     return (
-      <SandboxedLessonFrame
-        html={persisted.version.html}
-        title={persisted.lesson.title}
-      />
+      <div className="relative min-h-screen">
+        <Link
+          className={cn(
+            buttonVariants({ size: "sm", variant: "secondary" }),
+            "fixed top-4 right-4 z-10 shadow-lg"
+          )}
+          href={`/studio?lessonId=${encodeURIComponent(lessonId)}`}
+        >
+          Back to Studio
+        </Link>
+        <SandboxedLessonFrame
+          html={persisted.version.html}
+          title={persisted.lesson.title}
+        />
+      </div>
     );
   }
 

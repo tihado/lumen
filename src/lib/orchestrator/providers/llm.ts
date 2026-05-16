@@ -5,6 +5,7 @@ import type { AppEnv } from "@/lib/env";
 import type { ExtractedEntity } from "./pioneer";
 
 const DEFAULT_LESSON_MODEL = "gpt-5";
+const DEFAULT_CODE_MODEL = "gpt-5.2-codex";
 
 const lessonPlanSchema = z.object({
   title: z.string().min(1).max(120),
@@ -148,12 +149,91 @@ export async function generateOpenAICode(input: {
   prompt: string;
   env: AppEnv;
 }): Promise<{ text: string; model: string }> {
-  return generateOpenAIText({
-    env: input.env,
-    prompt: input.prompt,
+  const model = input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL;
+  const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
+  const { text } = await generateText({
+    model: openai(model),
     system:
-      "You write production-minded code. Return only the requested code and essential inline comments.",
+      "You write production-minded browser JavaScript. Return only the requested JavaScript code, with no Markdown fences and no explanations.",
+    prompt: input.prompt,
   });
+  return { text, model };
+}
+
+function stripCodeFence(value: string) {
+  const trimmed = value.trim();
+  const fenced = trimmed.match(/^```(?:javascript|js)?\s*([\s\S]*?)\s*```$/i);
+  return (fenced?.[1] ?? trimmed).trim();
+}
+
+function isUnsafeBrowserRuntimeScript(code: string) {
+  return (
+    /<\/script\b/i.test(code) ||
+    /\beval\s*\(/i.test(code) ||
+    /\bFunction\s*\(/.test(code) ||
+    /\bdocument\.write\s*\(/i.test(code) ||
+    /\bfetch\s*\(/i.test(code) ||
+    /\bXMLHttpRequest\b/i.test(code) ||
+    /\bimport\s*(?:\(|[\s{*])/i.test(code) ||
+    /\b(?:localStorage|sessionStorage)\b/i.test(code) ||
+    /\bwindow\.location\b/i.test(code)
+  );
+}
+
+export function fallbackLessonRuntimeScript() {
+  return `
+const root = document.querySelector("[data-runtime='static-lesson']");
+if (root) {
+  root.querySelectorAll("[data-objective-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const pressed = button.getAttribute("aria-pressed") === "true";
+      button.setAttribute("aria-pressed", String(!pressed));
+      button.classList.toggle("is-complete", !pressed);
+    });
+  });
+
+  const answer = root.querySelector("[data-quiz-answer]");
+  const feedback = root.querySelector("[data-quiz-feedback]");
+  root.querySelectorAll("[data-quiz-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const isCorrect = button.textContent?.trim() === answer?.textContent?.trim();
+      root.querySelectorAll("[data-quiz-choice]").forEach((choice) => {
+        choice.classList.remove("is-correct", "is-wrong");
+      });
+      button.classList.add(isCorrect ? "is-correct" : "is-wrong");
+      if (feedback) {
+        feedback.textContent = isCorrect ? "Correct. Nice reasoning." : "Try again, then compare with the answer.";
+      }
+    });
+  });
+}
+`.trim();
+}
+
+export async function generateLessonRuntimeScript(input: {
+  prompt: string;
+  plan: LessonPlan;
+  env: AppEnv;
+}): Promise<{ code: string; model: string; usedFallback: boolean }> {
+  const result = await generateOpenAICode({
+    env: input.env,
+    prompt: [
+      "Create vanilla browser JavaScript for an embedded interactive lesson page.",
+      "The HTML already contains [data-runtime='static-lesson'], [data-objective-toggle], [data-quiz-choice], [data-quiz-answer], and [data-quiz-feedback].",
+      "Requirements: no imports, no network calls, no storage, no eval, no document.write. Use DOM APIs only. Keep it under 200 lines.",
+      `Teacher transcript:\n${input.prompt}`,
+      `Lesson plan:\n${JSON.stringify(input.plan)}`,
+    ].join("\n\n---\n\n"),
+  });
+  const code = stripCodeFence(result.text);
+  if (code.length > 40_000 || isUnsafeBrowserRuntimeScript(code)) {
+    return {
+      code: fallbackLessonRuntimeScript(),
+      model: result.model,
+      usedFallback: true,
+    };
+  }
+  return { code, model: result.model, usedFallback: false };
 }
 
 export async function generateOpenAIJson(input: {

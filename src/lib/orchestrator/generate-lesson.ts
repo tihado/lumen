@@ -23,7 +23,12 @@ import {
   fallbackFalImage,
   fallbackFalVideo,
 } from "./providers/fal";
-import { fallbackLessonPlan, generateLessonPlan } from "./providers/llm";
+import {
+  fallbackLessonPlan,
+  fallbackLessonRuntimeScript,
+  generateLessonPlan,
+  generateLessonRuntimeScript,
+} from "./providers/llm";
 import {
   type ExtractedEntity,
   heuristicExtract,
@@ -35,7 +40,11 @@ import {
   slngTtsModel,
 } from "./providers/slng";
 import { fallbackTavilyResults, tavilySearch } from "./providers/tavily";
-import type { StreamEvent } from "./stream-events";
+import type {
+  ProviderId,
+  StreamEvent,
+  StudioTimelineRow,
+} from "./stream-events";
 
 export type { StreamEvent } from "./stream-events";
 
@@ -81,6 +90,52 @@ export async function* generateLessonStream(input: {
   const lessonId = input.lessonId ?? nanoid(10);
   const topic = topicFromTranscript(input.transcript);
   let generationRunCreated = false;
+  const studioTimeline: StudioTimelineRow[] = [];
+
+  const providerStarted = (
+    stepId: string,
+    provider: ProviderId,
+    label: string
+  ): StreamEvent => {
+    studioTimeline.push({
+      key: stepId,
+      provider,
+      label,
+      status: "started",
+    });
+    return { type: "provider_started", runId, stepId, provider, label };
+  };
+
+  const providerCompleted = (
+    stepId: string,
+    provider: ProviderId,
+    detail?: string,
+    usedFallback?: boolean
+  ): StreamEvent => {
+    const existing = studioTimeline.find((row) => row.key === stepId);
+    if (existing) {
+      existing.status = "completed";
+      existing.detail = detail;
+      existing.usedFallback = usedFallback;
+    } else {
+      studioTimeline.push({
+        key: stepId,
+        provider,
+        label: "",
+        status: "completed",
+        detail,
+        usedFallback,
+      });
+    }
+    return {
+      type: "provider_completed",
+      runId,
+      stepId,
+      provider,
+      detail,
+      usedFallback,
+    };
+  };
 
   yield {
     type: "run_started",
@@ -116,30 +171,11 @@ export async function* generateLessonStream(input: {
 
     const slngHint = describeSlngClientSetup(input.env);
     const s0 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s0,
-      provider: "slng",
-      label: "Voice / transcript intake",
-    };
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s0,
-      provider: "slng",
-      detail: slngHint.hint,
-      usedFallback: !slngHint.ready,
-    };
+    yield providerStarted(s0, "slng", "Voice / transcript intake");
+    yield providerCompleted(s0, "slng", slngHint.hint, !slngHint.ready);
 
     const s1 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s1,
-      provider: "tavily",
-      label: "Web-aware research (Tavily)",
-    };
+    yield providerStarted(s1, "tavily", "Web-aware research (Tavily)");
     let tavilyUsedFallback = !input.readiness.tavily;
     let searchResults = fallbackTavilyResults(topic);
     if (input.readiness.tavily) {
@@ -170,27 +206,23 @@ export async function* generateLessonStream(input: {
         tavilyUsedFallback = true;
       }
     }
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s1,
-      provider: "tavily",
-      detail: `${searchResults.length} source cards`,
-      usedFallback: tavilyUsedFallback,
-    };
+    yield providerCompleted(
+      s1,
+      "tavily",
+      `${searchResults.length} source cards`,
+      tavilyUsedFallback
+    );
 
     const hookTextId = "txt-hook";
     const citations = citationsFromTavily(searchResults, hookTextId);
     doc = applyLessonPatch(doc, { op: "set_citations", citations });
 
     const s2 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s2,
-      provider: "pioneer",
-      label: "Structured extraction (Pioneer / GLiNER2)",
-    };
+    yield providerStarted(
+      s2,
+      "pioneer",
+      "Structured extraction (Pioneer / GLiNER2)"
+    );
     const extractInput =
       `${input.transcript}\n\n---\n\n${searchResults.map((r) => r.content).join("\n\n")}`.slice(
         0,
@@ -212,23 +244,15 @@ export async function* generateLessonStream(input: {
     } else {
       entities = heuristicExtract(topic);
     }
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s2,
-      provider: "pioneer",
-      detail: `${entities.length} extracted slots`,
-      usedFallback: pioneerFallback,
-    };
+    yield providerCompleted(
+      s2,
+      "pioneer",
+      `${entities.length} extracted slots`,
+      pioneerFallback
+    );
 
     const s3 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s3,
-      provider: "llm",
-      label: "AI lesson composition (AI SDK)",
-    };
+    yield providerStarted(s3, "llm", "AI lesson composition (AI SDK)");
 
     let llmUsedFallback = !input.readiness.llm;
     let lessonPlan = fallbackLessonPlan({ topic, entities });
@@ -250,25 +274,17 @@ export async function* generateLessonStream(input: {
         llmUsedFallback = true;
       }
     }
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s3,
-      provider: "llm",
-      detail: llmUsedFallback
+    yield providerCompleted(
+      s3,
+      "llm",
+      llmUsedFallback
         ? "Deterministic lesson fallback"
         : `Structured plan via OpenAI ${lessonModel}`,
-      usedFallback: llmUsedFallback,
-    };
+      llmUsedFallback
+    );
 
     const s4 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s4,
-      provider: "orchestrator",
-      label: "Materialize lesson patches",
-    };
+    yield providerStarted(s4, "orchestrator", "Materialize lesson patches");
 
     const objId = "obj-main";
     const secHook = "sec-hook";
@@ -455,22 +471,10 @@ export async function* generateLessonStream(input: {
       yield { type: "lesson_snapshot", runId, lesson: doc };
     }
 
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s4,
-      provider: "orchestrator",
-      detail: "Lesson nodes materialized",
-    };
+    yield providerCompleted(s4, "orchestrator", "Lesson nodes materialized");
 
     const s5 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s5,
-      provider: "fal",
-      label: "Generative cover image (fal)",
-    };
+    yield providerStarted(s5, "fal", "Generative cover image (fal)");
     const prompt = `Educational cover illustration for lesson: ${topic}. Clean vector-like shapes, readable labels, classroom-safe, no text overlay.`;
     let falUsedFallback = !input.readiness.fal;
     let image = fallbackFalImage(topic);
@@ -513,23 +517,10 @@ export async function* generateLessonStream(input: {
     doc = applyLessonPatch(doc, mediaPatch);
     yield { type: "lesson_patch", runId, patch: mediaPatch };
     yield { type: "lesson_snapshot", runId, lesson: doc };
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s5,
-      provider: "fal",
-      detail: storedImage.url,
-      usedFallback: falUsedFallback,
-    };
+    yield providerCompleted(s5, "fal", storedImage.url, falUsedFallback);
 
     const s6 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s6,
-      provider: "fal",
-      label: "Generative lesson video (fal)",
-    };
+    yield providerStarted(s6, "fal", "Generative lesson video (fal)");
     const videoPrompt = `Create a short educational video for lesson: ${topic}. Show motion that clarifies the concept for students. No on-screen text, classroom-safe, calm narration-style audio if the model supports audio.`;
     let falVideoUsedFallback = !input.readiness.fal;
     let video = fallbackFalVideo(topic);
@@ -570,23 +561,10 @@ export async function* generateLessonStream(input: {
     doc = applyLessonPatch(doc, videoPatch);
     yield { type: "lesson_patch", runId, patch: videoPatch };
     yield { type: "lesson_snapshot", runId, lesson: doc };
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s6,
-      provider: "fal",
-      detail: storedVideo.url,
-      usedFallback: falVideoUsedFallback,
-    };
+    yield providerCompleted(s6, "fal", storedVideo.url, falVideoUsedFallback);
 
     const s7 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s7,
-      provider: "slng",
-      label: "Narration audio (SLNG)",
-    };
+    yield providerStarted(s7, "slng", "Narration audio (SLNG)");
     const narrationText = lessonPlan.explanationBody.slice(0, 900);
     let audioUsedFallback = !input.readiness.slng;
     const audioAssetUrl = `/api/audio?text=${encodeURIComponent(narrationText)}`;
@@ -648,41 +626,78 @@ export async function* generateLessonStream(input: {
     doc = applyLessonPatch(doc, audioPatch);
     yield { type: "lesson_patch", runId, patch: audioPatch };
     yield { type: "lesson_snapshot", runId, lesson: doc };
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s7,
-      provider: "slng",
-      detail: readyAudio.asset?.url ?? "Audio unavailable",
-      usedFallback: audioUsedFallback,
-    };
+    yield providerCompleted(
+      s7,
+      "slng",
+      readyAudio.asset?.url ?? "Audio unavailable",
+      audioUsedFallback
+    );
 
     const s8 = step();
-    yield {
-      type: "provider_started",
-      runId,
-      stepId: s8,
-      provider: "orchestrator",
-      label: "Persist sandboxed HTML lesson",
-    };
+    yield providerStarted(s8, "llm", "Generate lesson JavaScript");
+    let runtimeScript: string | undefined;
+    let runtimeScriptDetail = "Solar system uses bundled runtime";
+    let runtimeScriptUsedFallback = false;
+    if (!input.transcript.toLowerCase().includes("solar system")) {
+      if (input.readiness.llm) {
+        try {
+          const generatedScript = await generateLessonRuntimeScript({
+            prompt: input.transcript,
+            plan: lessonPlan,
+            env: input.env,
+          });
+          runtimeScript = generatedScript.code;
+          runtimeScriptDetail = generatedScript.usedFallback
+            ? `Validated fallback after OpenAI ${generatedScript.model}`
+            : `Generated inline JS via OpenAI ${generatedScript.model}`;
+          runtimeScriptUsedFallback = generatedScript.usedFallback;
+        } catch {
+          runtimeScript = fallbackLessonRuntimeScript();
+          runtimeScriptDetail = "Fallback inline JS";
+          runtimeScriptUsedFallback = true;
+        }
+      } else {
+        runtimeScript = fallbackLessonRuntimeScript();
+        runtimeScriptDetail = "Fallback inline JS";
+        runtimeScriptUsedFallback = true;
+      }
+    }
+    yield providerCompleted(
+      s8,
+      "llm",
+      runtimeScriptDetail,
+      runtimeScriptUsedFallback
+    );
+
+    const s9 = step();
+    yield providerStarted(s9, "orchestrator", "Persist sandboxed HTML lesson");
     const artifact = createSandboxedLessonArtifact({
       prompt: input.transcript,
       plan: lessonPlan,
+      runtimeScript,
     });
+    const persistCompleted = providerCompleted(
+      s9,
+      "orchestrator",
+      "Saved HTML lesson version to Postgres"
+    );
     await saveLessonVersion({
       lessonId,
       title: artifact.title,
       html: artifact.html,
-      spec: artifact.spec as unknown as Record<string, unknown>,
+      spec: {
+        ...artifact.spec,
+        studio: {
+          lesson: doc,
+          timeline: studioTimeline,
+          runId,
+          transcript: input.transcript,
+          completedAt: new Date().toISOString(),
+        },
+      } as unknown as Record<string, unknown>,
     });
     await finishGenerationRun({ id: runId, status: "completed" });
-    yield {
-      type: "provider_completed",
-      runId,
-      stepId: s8,
-      provider: "orchestrator",
-      detail: "Saved HTML lesson version to Postgres",
-    };
+    yield persistCompleted;
 
     yield { type: "run_completed", runId, lessonId };
   } catch (e) {

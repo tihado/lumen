@@ -84,16 +84,25 @@ export default async function LessonsPage() {
                   </span>
                 </div>
               </div>
-              <Link
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "shrink-0"
-                )}
-                href={`/lesson/${lesson.id}`}
-              >
-                Open
-                <ExternalLink className="size-3.5" />
-              </Link>
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                <Link
+                  className={cn(
+                    buttonVariants({ size: "sm", variant: "ghost" })
+                  )}
+                  href={`/studio?lessonId=${encodeURIComponent(lesson.id)}`}
+                >
+                  Studio
+                </Link>
+                <Link
+                  className={cn(
+                    buttonVariants({ size: "sm", variant: "outline" })
+                  )}
+                  href={`/lesson/${lesson.id}`}
+                >
+                  Open
+                  <ExternalLink className="size-3.5" />
+                </Link>
+              </div>
             </CardHeader>
           </Card>
         ))}

@@ -17,6 +17,15 @@ export type ProviderReadiness = {
   slng: boolean;
 };
 
+export type StudioTimelineRow = {
+  key: string;
+  provider: ProviderId;
+  label: string;
+  status: "started" | "completed" | "failed";
+  detail?: string;
+  usedFallback?: boolean;
+};
+
 export type StreamEvent =
   | {
       type: "run_started";

@@ -6,6 +6,7 @@ export type { ProviderReadiness } from "@/lib/orchestrator/stream-events";
 const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().optional(),
+  OPENAI_CODE_MODEL: z.string().optional(),
   TAVILY_API_KEY: z.string().optional(),
   FAL_KEY: z.string().optional(),
   FAL_IMAGE_MODEL: z.string().optional(),
@@ -36,6 +37,7 @@ function readRawEnv(): Record<string, string | undefined> {
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL,
+    OPENAI_CODE_MODEL: process.env.OPENAI_CODE_MODEL,
     TAVILY_API_KEY: process.env.TAVILY_API_KEY,
     FAL_KEY: process.env.FAL_KEY,
     FAL_IMAGE_MODEL: process.env.FAL_IMAGE_MODEL,
