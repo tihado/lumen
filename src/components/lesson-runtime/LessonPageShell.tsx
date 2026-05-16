@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { ActivityRuntime } from "@/components/lesson-runtime/ActivityRuntime";
+import { FloatingLessonVoiceAgent } from "@/components/lesson-runtime/FloatingLessonVoiceAgent";
 import { QuizRuntime } from "@/components/lesson-runtime/QuizRuntime";
 import { ReflectionPrompt } from "@/components/lesson-runtime/ReflectionPrompt";
 import { SourcePopover } from "@/components/lesson-runtime/SourcePopover";
@@ -9,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { LessonDocument } from "@/lib/lesson/schema";
+import { contextFromLessonDocument } from "@/lib/lesson/voice-agent-context";
 
 function citationForText(
   doc: LessonDocument,
@@ -171,44 +173,47 @@ export function LessonPageShell({ doc }: { doc: LessonDocument }) {
   const childIds = root?.type === "section" ? root.children : [];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-10 px-4 py-12">
-      <header className="space-y-3">
-        <p className="text-muted-foreground text-xs uppercase tracking-wide">
-          Student lesson
-        </p>
-        <h1 className="font-semibold text-4xl tracking-tight">{doc.title}</h1>
-        <div className="flex flex-wrap gap-2 text-muted-foreground text-sm">
-          {doc.gradeBand ? <span>{doc.gradeBand}</span> : null}
-          {doc.durationMinutes ? (
-            <span>
-              {doc.gradeBand ? "·" : null} ~{doc.durationMinutes} min
-            </span>
-          ) : null}
+    <>
+      <div className="mx-auto max-w-3xl space-y-10 px-4 py-12">
+        <header className="space-y-3">
+          <p className="text-muted-foreground text-xs uppercase tracking-wide">
+            Student lesson
+          </p>
+          <h1 className="font-semibold text-4xl tracking-tight">{doc.title}</h1>
+          <div className="flex flex-wrap gap-2 text-muted-foreground text-sm">
+            {doc.gradeBand ? <span>{doc.gradeBand}</span> : null}
+            {doc.durationMinutes ? (
+              <span>
+                {doc.gradeBand ? "·" : null} ~{doc.durationMinutes} min
+              </span>
+            ) : null}
+          </div>
+        </header>
+        <Separator />
+        <div className="space-y-10">
+          {childIds.map((id) => (
+            <StudentBlockTree depth={0} doc={doc} key={id} nodeId={id} />
+          ))}
         </div>
-      </header>
-      <Separator />
-      <div className="space-y-10">
-        {childIds.map((id) => (
-          <StudentBlockTree depth={0} doc={doc} key={id} nodeId={id} />
-        ))}
+        {doc.citations.length ? (
+          <footer className="border-border/70 border-t pt-8">
+            <h2 className="font-medium text-sm">Sources</h2>
+            <ul className="mt-3 space-y-2 text-muted-foreground text-sm">
+              {doc.citations.map((c) => (
+                <li key={c.id}>
+                  <a
+                    className="text-primary underline-offset-2 hover:underline"
+                    href={c.url}
+                  >
+                    {c.title ?? c.url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </footer>
+        ) : null}
       </div>
-      {doc.citations.length ? (
-        <footer className="border-border/70 border-t pt-8">
-          <h2 className="font-medium text-sm">Sources</h2>
-          <ul className="mt-3 space-y-2 text-muted-foreground text-sm">
-            {doc.citations.map((c) => (
-              <li key={c.id}>
-                <a
-                  className="text-primary underline-offset-2 hover:underline"
-                  href={c.url}
-                >
-                  {c.title ?? c.url}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </footer>
-      ) : null}
-    </div>
+      <FloatingLessonVoiceAgent context={contextFromLessonDocument(doc)} />
+    </>
   );
 }

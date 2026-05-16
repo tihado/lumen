@@ -7,7 +7,9 @@ import {
   Home,
   LibraryBig,
   Loader2,
+  PhoneCall,
   Play,
+  Radio,
   Send,
   Sparkles,
   TriangleAlert,
@@ -30,7 +32,8 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
+import { SlngVoiceAgentRoom } from "@/components/voice/SlngVoiceAgentRoom";
+import { VoiceSessionController } from "@/components/voice/VoiceSessionController";
 import type { DatabaseAvailability } from "@/lib/env";
 import { applyLessonPatch } from "@/lib/lesson/patches";
 import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
@@ -50,6 +53,14 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+};
+
+type VoiceAgentSession = {
+  livekitUrl: string;
+  livekitToken: string;
+  roomName: string;
+  callId: string;
+  maxSessionSeconds?: number;
 };
 
 export function StudioClient({
@@ -74,6 +85,10 @@ export function StudioClient({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaRetryingId, setMediaRetryingId] = useState<string | null>(null);
   const [savedLessonId, setSavedLessonId] = useState<string | null>(null);
+  const [voiceAgentBusy, setVoiceAgentBusy] = useState(false);
+  const [voiceAgentError, setVoiceAgentError] = useState<string | null>(null);
+  const [voiceAgentSession, setVoiceAgentSession] =
+    useState<VoiceAgentSession | null>(null);
   const runningTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>()
   );
@@ -502,6 +517,50 @@ export function StudioClient({
       ? "Adding sugar & spice..."
       : "Building the lesson...";
 
+  const startVoiceAgentSession = useCallback(async () => {
+    setVoiceAgentBusy(true);
+    setVoiceAgentError(null);
+    try {
+      const res = await fetch("/api/voice/agent-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lessonId: savedLessonId ?? lesson?.id,
+          lessonTitle: lesson?.title,
+          transcript,
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | (Partial<VoiceAgentSession> & { error?: string })
+        | null;
+      if (!res.ok) {
+        throw new Error(payload?.error ?? `HTTP ${res.status}`);
+      }
+      if (
+        !(
+          payload?.livekitUrl &&
+          payload.livekitToken &&
+          payload.roomName &&
+          payload.callId
+        )
+      ) {
+        throw new Error("SLNG did not return a complete web session.");
+      }
+      setVoiceAgentSession({
+        livekitUrl: payload.livekitUrl,
+        livekitToken: payload.livekitToken,
+        roomName: payload.roomName,
+        callId: payload.callId,
+        maxSessionSeconds: payload.maxSessionSeconds,
+      });
+    } catch (e) {
+      setVoiceAgentSession(null);
+      setVoiceAgentError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setVoiceAgentBusy(false);
+    }
+  }, [lesson, savedLessonId, transcript]);
+
   return (
     <div className="relative mx-auto flex h-dvh min-h-0 w-full max-w-7xl flex-col gap-5 overflow-hidden p-3 sm:p-4">
       <div className="mask-[linear-gradient(to_bottom,black,transparent_88%)] pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.35_0.07_185/0.055)_1px,transparent_1px),linear-gradient(90deg,oklch(0.35_0.07_185/0.045)_1px,transparent_1px)] bg-size-[44px_44px]" />
@@ -620,25 +679,56 @@ export function StudioClient({
                   )}
                 </div>
               </ScrollArea>
-              <Textarea
-                className="min-h-[104px] resize-y rounded-2xl bg-white/85 text-sm"
+              <VoiceSessionController
                 disabled={busy}
-                onChange={(e) => setTranscript(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                    e.preventDefault();
-                    submitIdeaSpark().catch(() => {
-                      /* errors handled inside submitIdeaSpark */
-                    });
-                  }
-                }}
-                placeholder={
-                  hasStartedConversation
-                    ? "Ask for changes, e.g. make the practice more hands-on and shorten the lecture."
-                    : "Example: 20-minute photosynthesis lesson for grade 6, hands-on, include a misconception check."
-                }
-                value={transcript}
+                onTranscriptChange={setTranscript}
+                transcript={transcript}
               />
+              <div className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,oklch(0.98_0.025_175),white)] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 font-medium text-sm">
+                      <Radio className="size-4 text-primary" />
+                      SLNG voice agent
+                    </p>
+                    <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+                      Start a SLNG web session for rehearsal feedback. The API
+                      key stays on the server.
+                    </p>
+                  </div>
+                  <Button
+                    className="shrink-0"
+                    disabled={voiceAgentBusy}
+                    onClick={() => {
+                      startVoiceAgentSession().catch(() => {
+                        /* errors handled inside startVoiceAgentSession */
+                      });
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {voiceAgentBusy ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <PhoneCall className="size-3.5" />
+                    )}
+                    Start
+                  </Button>
+                </div>
+                {voiceAgentSession ? (
+                  <SlngVoiceAgentRoom
+                    onEnded={() => setVoiceAgentSession(null)}
+                    onError={(message) => setVoiceAgentError(message)}
+                    session={voiceAgentSession}
+                  />
+                ) : null}
+                {voiceAgentError ? (
+                  <p className="mt-2 text-destructive text-xs">
+                    {voiceAgentError}
+                  </p>
+                ) : null}
+              </div>
               <Button
                 className="h-10 w-full rounded-2xl bg-[linear-gradient(135deg,oklch(0.68_0.14_174),oklch(0.78_0.16_83))] text-sm shadow-[0_16px_34px_oklch(0.58_0.13_150/0.24)] hover:brightness-105"
                 disabled={

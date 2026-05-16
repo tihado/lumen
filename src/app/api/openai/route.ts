@@ -6,7 +6,7 @@ import {
 } from "@/lib/orchestrator/providers/llm";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 600;
 
 type OpenAIMode = "text" | "json" | "code";
 

@@ -44,4 +44,17 @@ describe("getAppEnv", () => {
 
     expect(getDatabaseAvailability(getAppEnv())).toEqual({ configured: true });
   });
+
+  it("reads SLNG voice agent settings independently from core SLNG readiness", () => {
+    process.env.SLNG_API_KEY = "test-slng-key";
+    process.env.SLNG_API_BASE_URL = "https://api.slng.ai";
+    process.env.SLNG_AGENT_API_BASE_URL = "https://api.agents.slng.ai";
+    process.env.SLNG_AGENT_ID = "agent_123";
+
+    const env = getAppEnv();
+
+    expect(getProviderReadiness(env).slng).toBe(true);
+    expect(env.SLNG_AGENT_API_BASE_URL).toBe("https://api.agents.slng.ai");
+    expect(env.SLNG_AGENT_ID).toBe("agent_123");
+  });
 });

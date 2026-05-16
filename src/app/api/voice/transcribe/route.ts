@@ -2,7 +2,7 @@ import { getAppEnv, getProviderReadiness } from "@/lib/env";
 import { slngSpeechToText } from "@/lib/orchestrator/providers/slng";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 600;
 
 export async function POST(request: Request) {
   const env = getAppEnv();
