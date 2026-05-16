@@ -9,7 +9,86 @@ if (!(dataEl && canvas && root)) {
 }
 
 const lesson = JSON.parse(dataEl.textContent || "{}");
-const planets = Array.isArray(lesson.planets) ? lesson.planets : [];
+const planetGravityDefaults = {
+  mercury: {
+    surfaceGravity: "3.7 m/s²",
+    gravityComparedToEarth: "0.38 x Earth",
+    gravityNote:
+      "Mercury is small, so you would weigh much less there even though it is dense for its size.",
+    extraFact:
+      "Sunrise on Mercury can appear to stop, reverse, and rise again because of its slow spin and fast orbit.",
+  },
+  venus: {
+    surfaceGravity: "8.87 m/s²",
+    gravityComparedToEarth: "0.90 x Earth",
+    gravityNote:
+      "Venus is almost Earth's twin in size, so its surface gravity feels surprisingly familiar.",
+    extraFact: "One day on Venus is longer than one Venus year.",
+  },
+  earth: {
+    surfaceGravity: "9.81 m/s²",
+    gravityComparedToEarth: "1.00 x Earth",
+    gravityNote:
+      "Earth is our reference point: one Earth gravity is the pull your body is adapted to every day.",
+    extraFact:
+      "Earth's gravity helps hold the atmosphere and oceans that make life possible.",
+  },
+  mars: {
+    surfaceGravity: "3.71 m/s²",
+    gravityComparedToEarth: "0.38 x Earth",
+    gravityNote:
+      "Mars gravity is close to Mercury's, so jumping and carrying objects would feel much easier than on Earth.",
+    extraFact:
+      "Mars has two tiny moons, Phobos and Deimos, that may be captured asteroids.",
+  },
+  jupiter: {
+    surfaceGravity: "24.79 m/s²",
+    gravityComparedToEarth: "2.53 x Earth",
+    gravityNote:
+      "Jupiter's gravity is enormous because it is so massive, even though its visible surface is really cloud tops.",
+    extraFact:
+      "Its magnetic field is the strongest of any planet in the solar system.",
+  },
+  saturn: {
+    surfaceGravity: "10.44 m/s²",
+    gravityComparedToEarth: "1.06 x Earth",
+    gravityNote:
+      "Saturn is huge but low-density, so gravity near its cloud tops is only a little stronger than Earth's.",
+    extraFact: "Its rings are wide but extremely thin compared with the planet.",
+  },
+  uranus: {
+    surfaceGravity: "8.69 m/s²",
+    gravityComparedToEarth: "0.89 x Earth",
+    gravityNote:
+      "Uranus is larger than Earth, but its lower density keeps surface gravity slightly weaker than ours.",
+    extraFact: "Uranus was the first planet discovered with a telescope.",
+  },
+  neptune: {
+    surfaceGravity: "11.15 m/s²",
+    gravityComparedToEarth: "1.14 x Earth",
+    gravityNote:
+      "Neptune is an ice giant with a strong pull, but it is still far gentler than Jupiter.",
+    extraFact: "Neptune was predicted mathematically before it was directly observed.",
+  },
+};
+
+const planets = Array.isArray(lesson.planets)
+  ? lesson.planets.map((planet) => {
+      const defaults = planetGravityDefaults[planet.id] || {};
+      const facts = Array.isArray(planet.facts) ? [...planet.facts] : [];
+      if (defaults.extraFact && !facts.includes(defaults.extraFact)) {
+        facts.push(defaults.extraFact);
+      }
+      return {
+        ...planet,
+        surfaceGravity: planet.surfaceGravity || defaults.surfaceGravity,
+        gravityComparedToEarth:
+          planet.gravityComparedToEarth || defaults.gravityComparedToEarth,
+        gravityNote: planet.gravityNote || defaults.gravityNote,
+        facts,
+      };
+    })
+  : [];
 const sunInfo = {
   id: "sun",
   name: "Sun",
@@ -24,6 +103,10 @@ const sunInfo = {
   diameter: "1.39 million km",
   distanceFromSun: "Center of the system",
   orbitalPeriod: "About 25-35 days rotation",
+  surfaceGravity: "274 m/s²",
+  gravityComparedToEarth: "28 x Earth",
+  gravityNote:
+    "The Sun's gravity dominates the whole solar system; without it, the planets would not stay in orbit.",
 };
 
 const runtimeStyles = document.createElement("style");
@@ -60,6 +143,112 @@ runtimeStyles.textContent = `
     padding: 9px 13px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
     backdrop-filter: blur(12px);
+  }
+  [data-runtime="solar-system"] .planet-popover {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 4;
+    width: min(310px, calc(100% - 28px));
+    border: 1px solid rgba(255, 209, 102, .38);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(13, 25, 51, .94), rgba(4, 10, 25, .92));
+    box-shadow: 0 18px 46px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255,255,255,.09);
+    color: #f8fafc;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate3d(var(--popup-x, 0), var(--popup-y, 0), 0) scale(.96);
+    transform-origin: var(--origin-x, 50%) var(--origin-y, 100%);
+    transition: opacity .18s ease, transform .18s ease;
+    backdrop-filter: blur(16px);
+  }
+  [data-runtime="solar-system"] .planet-popover[data-open="true"] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate3d(var(--popup-x, 0), var(--popup-y, 0), 0) scale(1);
+  }
+  [data-runtime="solar-system"] .planet-popover[data-side="below"] {
+    transform-origin: var(--origin-x, 50%) 0%;
+  }
+  [data-runtime="solar-system"] .planet-popover-arrow {
+    position: absolute;
+    left: var(--arrow-x, 50%);
+    top: 100%;
+    width: 14px;
+    height: 14px;
+    border-right: 1px solid rgba(255, 209, 102, .38);
+    border-bottom: 1px solid rgba(255, 209, 102, .38);
+    background: rgba(4, 10, 25, .94);
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+  [data-runtime="solar-system"] .planet-popover[data-side="below"] .planet-popover-arrow {
+    top: 0;
+    border: 0;
+    border-left: 1px solid rgba(255, 209, 102, .38);
+    border-top: 1px solid rgba(255, 209, 102, .38);
+    background: rgba(13, 25, 51, .94);
+  }
+  [data-runtime="solar-system"] .planet-popover-body {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 10px;
+    padding: 15px 16px 16px;
+  }
+  [data-runtime="solar-system"] .planet-popover-kicker {
+    color: #ffd166;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  [data-runtime="solar-system"] .planet-popover-title {
+    margin: 0;
+    padding-right: 24px;
+    font-size: 24px;
+    line-height: 1;
+  }
+  [data-runtime="solar-system"] .planet-popover-description {
+    margin: 0;
+    color: #dbeafe;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  [data-runtime="solar-system"] .planet-popover-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 7px 12px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(172, 190, 220, .16);
+    font-size: 11px;
+  }
+  [data-runtime="solar-system"] .planet-popover-gravity {
+    margin: 0;
+    color: #ffe8a3;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  [data-runtime="solar-system"] .planet-popover-meta span:nth-child(odd) {
+    color: #a9b5c8;
+  }
+  [data-runtime="solar-system"] .planet-popover-meta span:nth-child(even) {
+    color: #edf5ff;
+    font-weight: 760;
+    text-align: right;
+  }
+  [data-runtime="solar-system"] .planet-popover-close {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    padding: 0;
+    border-color: rgba(255, 255, 255, .16);
+    border-radius: 999px;
+    line-height: 1;
   }
   aside {
     position: relative;
@@ -102,6 +291,24 @@ runtimeStyles.textContent = `
     color: #edf5ff;
     font-weight: 760;
   }
+  .gravity-panel {
+    display: grid;
+    gap: 8px;
+    margin: -2px 0 22px;
+    padding: 14px;
+    border: 1px solid rgba(103, 232, 249, .2);
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(103, 232, 249, .1), rgba(255, 209, 102, .06));
+  }
+  .gravity-panel strong {
+    color: #f8fafc;
+  }
+  .gravity-panel p {
+    margin: 0;
+    color: #dbeafe;
+    font-size: 13px;
+    line-height: 1.55;
+  }
   li::marker {
     color: #67e8f9;
   }
@@ -140,6 +347,9 @@ runtimeStyles.textContent = `
     }
     aside {
       padding: 22px;
+    }
+    [data-runtime="solar-system"] .planet-popover {
+      width: min(286px, calc(100% - 22px));
     }
   }
 `;
@@ -687,9 +897,51 @@ const descriptionEl = document.getElementById("planet-description");
 const diameterEl = document.getElementById("planet-diameter");
 const distanceEl = document.getElementById("planet-distance");
 const periodEl = document.getElementById("planet-period");
+const gravityEl = document.getElementById("planet-gravity");
+const gravityNoteEl = document.getElementById("gravity-note");
 const factsEl = document.getElementById("planet-facts");
 const listEl = document.getElementById("planet-list");
 const resetBtn = document.getElementById("reset-view");
+const popupPosition = new THREE.Vector3();
+const popupScreenPosition = new THREE.Vector3();
+const planetPopup = document.createElement("div");
+planetPopup.className = "planet-popover";
+planetPopup.setAttribute("role", "status");
+planetPopup.setAttribute("aria-live", "polite");
+planetPopup.dataset.open = "false";
+planetPopup.innerHTML = `
+  <div class="planet-popover-arrow" aria-hidden="true"></div>
+  <div class="planet-popover-body">
+    <button class="planet-popover-close" type="button" aria-label="Close popup">x</button>
+    <span class="planet-popover-kicker">Selected body</span>
+    <h3 class="planet-popover-title"></h3>
+    <p class="planet-popover-description"></p>
+    <div class="planet-popover-meta">
+      <span>Diameter</span><span data-popup-diameter></span>
+      <span>Distance</span><span data-popup-distance></span>
+      <span>Orbit</span><span data-popup-period></span>
+      <span>Gravity</span><span data-popup-gravity></span>
+    </div>
+    <p class="planet-popover-gravity"></p>
+  </div>
+`;
+root.appendChild(planetPopup);
+
+const popupTitleEl = planetPopup.querySelector(".planet-popover-title");
+const popupDescriptionEl = planetPopup.querySelector(".planet-popover-description");
+const popupDiameterEl = planetPopup.querySelector("[data-popup-diameter]");
+const popupDistanceEl = planetPopup.querySelector("[data-popup-distance]");
+const popupPeriodEl = planetPopup.querySelector("[data-popup-period]");
+const popupGravityEl = planetPopup.querySelector("[data-popup-gravity]");
+const popupGravityNoteEl = planetPopup.querySelector(".planet-popover-gravity");
+const popupCloseBtn = planetPopup.querySelector(".planet-popover-close");
+
+function getGravitySummary(body) {
+  if (!(body.surfaceGravity || body.gravityComparedToEarth)) {
+    return "—";
+  }
+  return [body.surfaceGravity, body.gravityComparedToEarth].filter(Boolean).join(" · ");
+}
 
 function setActiveButton() {
   for (const button of listEl?.querySelectorAll("button") || []) {
@@ -713,6 +965,14 @@ function updateDetails(body) {
   if (periodEl) {
     periodEl.textContent = body.orbitalPeriod;
   }
+  if (gravityEl) {
+    gravityEl.textContent = getGravitySummary(body);
+  }
+  if (gravityNoteEl) {
+    gravityNoteEl.textContent =
+      body.gravityNote ||
+      "Gravity is the attractive force between objects with mass. Bigger and denser worlds usually pull more strongly.";
+  }
   if (factsEl) {
     factsEl.innerHTML = "";
     for (const fact of body.facts || []) {
@@ -721,6 +981,91 @@ function updateDetails(body) {
       factsEl.appendChild(li);
     }
   }
+}
+
+function updatePopupDetails(body) {
+  if (popupTitleEl) {
+    popupTitleEl.textContent = body.name;
+  }
+  if (popupDescriptionEl) {
+    popupDescriptionEl.textContent = body.description;
+  }
+  if (popupDiameterEl) {
+    popupDiameterEl.textContent = body.diameter;
+  }
+  if (popupDistanceEl) {
+    popupDistanceEl.textContent = body.distanceFromSun;
+  }
+  if (popupPeriodEl) {
+    popupPeriodEl.textContent = body.orbitalPeriod;
+  }
+  if (popupGravityEl) {
+    popupGravityEl.textContent = getGravitySummary(body);
+  }
+  if (popupGravityNoteEl) {
+    popupGravityNoteEl.textContent = body.gravityNote || "";
+  }
+}
+
+function showPlanetPopup(body) {
+  updatePopupDetails(body);
+  planetPopup.dataset.open = "true";
+}
+
+function hidePlanetPopup() {
+  planetPopup.dataset.open = "false";
+}
+
+function getSelectedObject() {
+  if (selectedType === "sun") {
+    return sun;
+  }
+  if (selectedType === "planet" && selectedId) {
+    return planetMeshes.get(selectedId) || null;
+  }
+  return null;
+}
+
+function updatePopupPosition() {
+  if (planetPopup.dataset.open !== "true") {
+    return;
+  }
+
+  const selectedObject = getSelectedObject();
+  if (!selectedObject) {
+    hidePlanetPopup();
+    return;
+  }
+
+  const rect = root.getBoundingClientRect();
+  selectedObject.getWorldPosition(popupPosition);
+  popupScreenPosition.copy(popupPosition).project(camera);
+
+  if (popupScreenPosition.z < -1 || popupScreenPosition.z > 1) {
+    planetPopup.dataset.open = "false";
+    return;
+  }
+
+  const anchorX = ((popupScreenPosition.x + 1) / 2) * rect.width;
+  const anchorY = ((-popupScreenPosition.y + 1) / 2) * rect.height;
+  const popupWidth = planetPopup.offsetWidth || 310;
+  const popupHeight = planetPopup.offsetHeight || 170;
+  const margin = 12;
+  const gap = 42;
+  const placeBelow = anchorY - popupHeight - gap < margin;
+  const minX = margin;
+  const maxX = Math.max(minX, rect.width - popupWidth - margin);
+  const left = Math.min(Math.max(anchorX - popupWidth / 2, minX), maxX);
+  const top = placeBelow
+    ? Math.min(anchorY + gap, Math.max(margin, rect.height - popupHeight - margin))
+    : Math.max(margin, anchorY - popupHeight - gap);
+  const arrowX = Math.min(Math.max(anchorX - left, 18), popupWidth - 18);
+
+  planetPopup.dataset.side = placeBelow ? "below" : "above";
+  planetPopup.style.setProperty("--popup-x", `${left}px`);
+  planetPopup.style.setProperty("--popup-y", `${top}px`);
+  planetPopup.style.setProperty("--arrow-x", `${arrowX}px`);
+  planetPopup.style.setProperty("--origin-x", `${arrowX}px`);
 }
 
 function selectSun() {
@@ -732,6 +1077,7 @@ function selectSun() {
   selectedRing.scale.setScalar(sunInfo.radius * 1.85);
   selectedRing.position.set(0, 0, 0);
   updateDetails(sunInfo);
+  showPlanetPopup(sunInfo);
   setActiveButton();
 }
 
@@ -747,6 +1093,7 @@ function selectPlanet(id) {
   selectedRing.material.opacity = 0.78;
   selectedRing.scale.setScalar(planet.radius * 1.75);
   updateDetails(planet);
+  showPlanetPopup(planet);
   desiredTarget.copy(mesh.position);
   setActiveButton();
 }
@@ -773,10 +1120,18 @@ function resetView() {
   if (periodEl) {
     periodEl.textContent = "—";
   }
+  if (gravityEl) {
+    gravityEl.textContent = "—";
+  }
+  if (gravityNoteEl) {
+    gravityNoteEl.textContent =
+      "Gravity is the attractive force between objects with mass. Bigger and denser worlds usually pull more strongly, so the same student would weigh different amounts on different planets.";
+  }
   if (factsEl) {
     factsEl.innerHTML =
-      "<li>The solar system includes the Sun, eight planets, and many smaller bodies.</li>";
+      "<li>The solar system includes the Sun, eight planets, and many smaller bodies.</li><li>Compare gravity values to predict where jumping, walking, or launching a rocket would be easiest.</li>";
   }
+  hidePlanetPopup();
   setActiveButton();
 }
 
@@ -799,6 +1154,7 @@ if (listEl) {
 }
 
 resetBtn?.addEventListener("click", resetView);
+popupCloseBtn?.addEventListener("click", hidePlanetPopup);
 
 let dragging = false;
 let lastX = 0;
@@ -919,6 +1275,7 @@ function animate(time) {
   }
 
   updateCamera();
+  updatePopupPosition();
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }

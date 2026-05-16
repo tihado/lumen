@@ -29,6 +29,26 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: new () => BrowserRecognition;
 };
 
+type BrowserRecognitionResult = {
+  readonly isFinal: boolean;
+  readonly 0?: {
+    readonly transcript?: string;
+  };
+};
+
+type BrowserRecognitionResultListLike = {
+  readonly length: number;
+  readonly [index: number]: BrowserRecognitionResult | undefined;
+};
+
+function cleanSpeechText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function joinTranscriptParts(parts: string[]) {
+  return parts.map(cleanSpeechText).filter(Boolean).join(" ");
+}
+
 /** Typed transcript + optional browser SpeechRecognition (where supported). SLNG client wiring can replace internals later. */
 export function VoiceSessionController({
   transcript,
@@ -38,6 +58,7 @@ export function VoiceSessionController({
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<BrowserRecognition | null>(null);
+  const dictationBaseRef = useRef("");
   const transcriptRef = useRef(transcript);
   transcriptRef.current = transcript;
 
@@ -69,22 +90,32 @@ export function VoiceSessionController({
       return;
     }
     const rec = new (SR as new () => BrowserRecognition)();
+    dictationBaseRef.current = transcriptRef.current;
     rec.lang = "en-US";
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (event: Event) => {
       const ev = event as unknown as {
-        resultIndex: number;
-        results: SpeechRecognitionResultList;
+        results: BrowserRecognitionResultListLike;
       };
-      let chunk = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        chunk += ev.results[i]?.[0]?.transcript ?? "";
+      const finalParts: string[] = [];
+      const interimParts: string[] = [];
+      for (let i = 0; i < ev.results.length; i++) {
+        const result = ev.results[i];
+        const text = result?.[0]?.transcript ?? "";
+        if (!(result && text)) {
+          continue;
+        }
+        if (result.isFinal) {
+          finalParts.push(text);
+        } else {
+          interimParts.push(text);
+        }
       }
-      if (chunk) {
-        const base = transcriptRef.current;
+      const speechText = joinTranscriptParts([...finalParts, ...interimParts]);
+      if (speechText) {
         onTranscriptChange(
-          `${base}${base && !base.endsWith(" ") ? " " : ""}${chunk}`
+          joinTranscriptParts([dictationBaseRef.current, speechText])
         );
       }
     };

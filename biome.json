@@ -35,7 +35,8 @@
           "level": "error"
         },
         "noNestedTernary": "off",
-        "useFilenamingConvention": "off"
+        "useFilenamingConvention": "off",
+        "useForOf": "off"
       },
       "performance": {
         "useTopLevelRegex": "off",

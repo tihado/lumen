@@ -17,6 +17,9 @@ const planetSchema = z.object({
   diameter: z.string(),
   distanceFromSun: z.string(),
   orbitalPeriod: z.string(),
+  surfaceGravity: z.string().optional(),
+  gravityComparedToEarth: z.string().optional(),
+  gravityNote: z.string().optional(),
 });
 
 export const sandboxedLessonSpecSchema = z.object({
@@ -89,10 +92,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "A year on Mercury lasts about 88 Earth days.",
       "Mercury has almost no thick atmosphere to trap heat.",
+      "Sunrise on Mercury can appear to stop, reverse, and rise again because of its slow spin and fast orbit.",
     ],
     diameter: "4.879 km",
     distanceFromSun: "57.9 million km",
     orbitalPeriod: "88 days",
+    surfaceGravity: "3.7 m/s²",
+    gravityComparedToEarth: "0.38 x Earth",
+    gravityNote:
+      "Mercury is small, so you would weigh much less there even though it is dense for its size.",
   },
   {
     id: "venus",
@@ -106,10 +114,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "Venus rotates very slowly and spins backward compared with most planets.",
       "Sulfuric acid clouds make its surface difficult to observe directly.",
+      "One day on Venus is longer than one Venus year.",
     ],
     diameter: "12.104 km",
     distanceFromSun: "108.2 million km",
     orbitalPeriod: "225 days",
+    surfaceGravity: "8.87 m/s²",
+    gravityComparedToEarth: "0.90 x Earth",
+    gravityNote:
+      "Venus is almost Earth's twin in size, so its surface gravity feels surprisingly familiar.",
   },
   {
     id: "earth",
@@ -123,10 +136,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "About 71% of Earth's surface is covered by water.",
       "Earth's magnetic field helps protect the biosphere from the solar wind.",
+      "Earth's gravity helps hold the atmosphere and oceans that make life possible.",
     ],
     diameter: "12.742 km",
     distanceFromSun: "149.6 million km",
     orbitalPeriod: "365.25 days",
+    surfaceGravity: "9.81 m/s²",
+    gravityComparedToEarth: "1.00 x Earth",
+    gravityNote:
+      "Earth is our reference point: one Earth gravity is the pull your body is adapted to every day.",
   },
   {
     id: "mars",
@@ -140,10 +158,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "Olympus Mons on Mars is the largest known volcano in the solar system.",
       "Rovers have found evidence of environments that once held water.",
+      "Mars has two tiny moons, Phobos and Deimos, that may be captured asteroids.",
     ],
     diameter: "6.779 km",
     distanceFromSun: "227.9 million km",
     orbitalPeriod: "687 days",
+    surfaceGravity: "3.71 m/s²",
+    gravityComparedToEarth: "0.38 x Earth",
+    gravityNote:
+      "Mars gravity is close to Mercury's, so jumping and carrying objects would feel much easier than on Earth.",
   },
   {
     id: "jupiter",
@@ -157,10 +180,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "Jupiter has more mass than all the other planets combined.",
       "Many of Jupiter's moons, such as Europa, are targets in the search for potential life.",
+      "Its magnetic field is the strongest of any planet in the solar system.",
     ],
     diameter: "139.820 km",
     distanceFromSun: "778.5 million km",
     orbitalPeriod: "11.86 years",
+    surfaceGravity: "24.79 m/s²",
+    gravityComparedToEarth: "2.53 x Earth",
+    gravityNote:
+      "Jupiter's gravity is enormous because it is so massive, even though its visible surface is really cloud tops.",
   },
   {
     id: "saturn",
@@ -174,10 +202,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "Saturn's average density is lower than water.",
       "Its moon Titan has a thick atmosphere and lakes of liquid methane.",
+      "Its rings are wide but extremely thin compared with the planet.",
     ],
     diameter: "116.460 km",
     distanceFromSun: "1.43 billion km",
     orbitalPeriod: "29.5 years",
+    surfaceGravity: "10.44 m/s²",
+    gravityComparedToEarth: "1.06 x Earth",
+    gravityNote:
+      "Saturn is huge but low-density, so gravity near its cloud tops is only a little stronger than Earth's.",
   },
   {
     id: "uranus",
@@ -191,10 +224,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "Its axial tilt of about 98 degrees creates very long seasons.",
       "Its blue-green color comes from methane in the atmosphere.",
+      "Uranus was the first planet discovered with a telescope.",
     ],
     diameter: "50.724 km",
     distanceFromSun: "2.87 billion km",
     orbitalPeriod: "84 years",
+    surfaceGravity: "8.69 m/s²",
+    gravityComparedToEarth: "0.89 x Earth",
+    gravityNote:
+      "Uranus is larger than Earth, but its lower density keeps surface gravity slightly weaker than ours.",
   },
   {
     id: "neptune",
@@ -208,10 +246,15 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
     facts: [
       "Winds on Neptune can reach supersonic speeds.",
       "A year on Neptune lasts about 165 Earth years.",
+      "Neptune was predicted mathematically before it was directly observed.",
     ],
     diameter: "49.244 km",
     distanceFromSun: "4.5 billion km",
     orbitalPeriod: "165 years",
+    surfaceGravity: "11.15 m/s²",
+    gravityComparedToEarth: "1.14 x Earth",
+    gravityNote:
+      "Neptune is an ice giant with a strong pull, but it is still far gentler than Jupiter.",
   },
 ];
 
@@ -320,6 +363,9 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
     dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; margin: 20px 0 22px; padding: 16px 0; border-top: 1px solid rgba(172, 190, 220, .14); border-bottom: 1px solid rgba(172, 190, 220, .14); font-size: 13px; }
     dt { color: var(--muted); }
     dd { margin: 0; text-align: right; color: #edf5ff; font-weight: 760; }
+    .gravity-panel { display: grid; gap: 8px; margin: -2px 0 22px; padding: 14px; border: 1px solid rgba(103, 232, 249, .2); border-radius: 8px; background: linear-gradient(135deg, rgba(103, 232, 249, .1), rgba(255, 209, 102, .06)); }
+    .gravity-panel strong { color: #f8fafc; }
+    .gravity-panel p { margin: 0; color: #dbeafe; font-size: 13px; line-height: 1.55; }
     ul { margin: 0; padding-left: 20px; color: #e3efff; line-height: 1.62; }
     li::marker { color: var(--cyan); }
     .planet-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 22px; }
@@ -363,7 +409,12 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
           <dt>Diameter</dt><dd id="planet-diameter">—</dd>
           <dt>Distance</dt><dd id="planet-distance">—</dd>
           <dt>Orbital period</dt><dd id="planet-period">—</dd>
+          <dt>Gravity</dt><dd id="planet-gravity">—</dd>
         </dl>
+        <div class="gravity-panel">
+          <strong>What is gravity?</strong>
+          <p id="gravity-note">Gravity is the attractive force between objects with mass. Bigger and denser worlds usually pull more strongly, so the same student would weigh different amounts on different planets.</p>
+        </div>
         <ul id="planet-facts"><li>The solar system includes the Sun, eight planets, and many smaller bodies.</li></ul>
         <div class="planet-list" id="planet-list"></div>
       </aside>

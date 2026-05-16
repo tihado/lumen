@@ -1,3 +1,5 @@
+import { createFal } from "@ai-sdk/fal";
+import { generateImage } from "ai";
 import type { AppEnv } from "@/lib/env";
 
 export type FalImageResult = {
@@ -17,8 +19,11 @@ export type FalVideoResult = {
 type FalFile = {
   url?: string;
   content_type?: string;
+  contentType?: string;
   file_name?: string;
+  fileName?: string;
   file_size?: number;
+  fileSize?: number;
 };
 
 type FalVideoResponse = {
@@ -36,96 +41,84 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function imageRequestBody(model: string, prompt: string) {
+function falApiKey(env: AppEnv) {
+  return env.FAL_API_KEY ?? env.FAL_KEY;
+}
+
+function dataUrl(file: { base64: string; mediaType: string }) {
+  return `data:${file.mediaType};base64,${file.base64}`;
+}
+
+function firstFalImageMetadata(providerMetadata: unknown) {
+  const image = (
+    providerMetadata as {
+      fal?: { images?: Record<string, unknown>[] };
+    }
+  ).fal?.images?.[0];
+  return {
+    width: optionalNumber(image?.width),
+    height: optionalNumber(image?.height),
+    mime:
+      typeof image?.contentType === "string" ? image.contentType : undefined,
+  };
+}
+
+function imageGenerationOptions(model: string) {
   if (model === "fal-ai/nano-banana-2") {
     return {
-      prompt,
-      num_images: 1,
-      aspect_ratio: "4:3",
-      output_format: "png",
-      safety_tolerance: "4",
-      sync_mode: false,
+      outputFormat: "png",
+      safetyTolerance: "4",
+      syncMode: false,
       resolution: "1K",
       limit_generations: true,
       enable_web_search: false,
     };
   }
 
-  return {
-    prompt,
-    image_size: "landscape_4_3",
-    num_images: 1,
-  };
+  return {};
 }
 
 /**
- * Submits a fal image job (sync fal.run endpoint). Override model with FAL_IMAGE_MODEL.
+ * Generates a fal image through the AI SDK. Override model with FAL_IMAGE_MODEL.
  */
 export async function falGenerateImage(
   prompt: string,
   env: AppEnv
 ): Promise<FalImageResult> {
-  const key = env.FAL_KEY;
+  const key = falApiKey(env);
   if (!key) {
-    throw new Error("FAL_KEY missing");
+    throw new Error("FAL_API_KEY or FAL_KEY missing");
   }
   const model = env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell";
-  const url = `https://fal.run/${model}`;
   const startedAt = Date.now();
   console.info("[fal] image request started", {
     model,
     promptLength: prompt.length,
   });
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Key ${key}`,
-      "Content-Type": "application/json",
+  const provider = createFal({ apiKey: key });
+  const options = imageGenerationOptions(model);
+  const result = await generateImage({
+    model: provider.image(model),
+    prompt,
+    n: 1,
+    aspectRatio: "4:3",
+    providerOptions: {
+      fal: options,
     },
-    body: JSON.stringify(imageRequestBody(model, prompt)),
   });
-  console.info("[fal] image response received", {
-    model,
-    status: res.status,
-    ok: res.ok,
-    durationMs: Date.now() - startedAt,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    console.warn("[fal] image response body", {
-      model,
-      status: res.status,
-      bodyPreview: text.slice(0, 500),
-    });
-    throw new Error(`fal HTTP ${res.status}: ${text.slice(0, 240)}`);
-  }
-  const data = (await res.json()) as {
-    images?: Array<{
-      url: string;
-      content_type?: string;
-      width?: unknown;
-      height?: unknown;
-    }>;
-  };
-  const img = data.images?.[0];
-  if (!img?.url) {
-    console.warn("[fal] image response missing url", {
-      model,
-      responseKeys: Object.keys(data),
-    });
-    throw new Error("fal response missing images[0].url");
-  }
-  const width = optionalNumber(img.width);
-  const height = optionalNumber(img.height);
+  const metadata = firstFalImageMetadata(result.providerMetadata);
+  const width = metadata.width;
+  const height = metadata.height;
   console.info("[fal] image ready", {
     model,
     width,
     height,
+    warnings: result.warnings.length,
     durationMs: Date.now() - startedAt,
   });
   return {
-    url: img.url,
-    mime: img.content_type ?? "image/png",
+    url: dataUrl(result.image),
+    mime: metadata.mime ?? result.image.mediaType,
     ...(width === undefined ? {} : { width }),
     ...(height === undefined ? {} : { height }),
   };
@@ -174,9 +167,9 @@ function parseFalVideoResponse(data: FalVideoResponse): FalVideoResult {
   }
   return {
     url: video.url,
-    mime: video.content_type ?? "video/mp4",
-    fileName: video.file_name,
-    fileSize: video.file_size,
+    mime: video.content_type ?? video.contentType ?? "video/mp4",
+    fileName: video.file_name ?? video.fileName,
+    fileSize: video.file_size ?? video.fileSize,
   };
 }
 
@@ -206,9 +199,9 @@ export async function falGenerateVideo(
   prompt: string,
   env: AppEnv
 ): Promise<FalVideoResult> {
-  const key = env.FAL_KEY;
+  const key = falApiKey(env);
   if (!key) {
-    throw new Error("FAL_KEY missing");
+    throw new Error("FAL_API_KEY or FAL_KEY missing");
   }
   const model = env.FAL_VIDEO_MODEL ?? "fal-ai/veo3.1/fast";
   const url = `https://queue.fal.run/${model}`;

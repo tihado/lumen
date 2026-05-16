@@ -8,6 +8,7 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().optional(),
   OPENAI_CODE_MODEL: z.string().optional(),
   TAVILY_API_KEY: z.string().optional(),
+  FAL_API_KEY: z.string().optional(),
   FAL_KEY: z.string().optional(),
   FAL_IMAGE_MODEL: z.string().optional(),
   FAL_VIDEO_MODEL: z.string().optional(),
@@ -44,6 +45,7 @@ function readRawEnv(): Record<string, string | undefined> {
     OPENAI_MODEL: optionalEnv(process.env.OPENAI_MODEL),
     OPENAI_CODE_MODEL: optionalEnv(process.env.OPENAI_CODE_MODEL),
     TAVILY_API_KEY: optionalEnv(process.env.TAVILY_API_KEY),
+    FAL_API_KEY: optionalEnv(process.env.FAL_API_KEY),
     FAL_KEY: optionalEnv(process.env.FAL_KEY),
     FAL_IMAGE_MODEL: optionalEnv(process.env.FAL_IMAGE_MODEL),
     FAL_VIDEO_MODEL: optionalEnv(process.env.FAL_VIDEO_MODEL),
@@ -86,7 +88,7 @@ export function getProviderReadiness(
   return {
     llm: Boolean(env.OPENAI_API_KEY),
     tavily: Boolean(env.TAVILY_API_KEY),
-    fal: Boolean(env.FAL_KEY),
+    fal: Boolean(env.FAL_API_KEY ?? env.FAL_KEY),
     pioneer: Boolean(env.PIONEER_API_URL),
     slng: Boolean(env.SLNG_API_KEY && env.SLNG_API_BASE_URL),
   };
