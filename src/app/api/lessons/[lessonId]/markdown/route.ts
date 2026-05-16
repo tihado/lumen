@@ -47,11 +47,8 @@ export async function POST(
       );
     }
 
-    return new Response(lessonDocumentToMarkdown(studioState.lesson), {
-      headers: {
-        "Content-Disposition": `inline; filename="${result.lesson.slug}.md"`,
-        "Content-Type": "text/markdown; charset=utf-8",
-      },
+    return Response.json({
+      lesson_content: lessonDocumentToMarkdown(studioState.lesson),
     });
   } catch (e) {
     return Response.json(
