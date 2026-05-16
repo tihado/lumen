@@ -75,15 +75,12 @@ export default function Home() {
                 Lumen
               </h1>
               <p className="max-w-xl text-balance font-medium text-2xl tracking-tight sm:text-3xl">
-                A bright, voice-first studio where lesson sparks turn into
-                board-ready plans—often before your coffee goes cold.
+                Light any lesson.
               </p>
             </div>
             <p className="max-w-xl text-lg text-muted-foreground leading-relaxed">
-              Talk or type a half-formed idea, watch grounded blocks land on the
-              canvas while each step shows its homework, then nudge things until
-              they feel class-ready—serious pedagogy, suspiciously little
-              spreadsheet energy.
+              The calm way to plan. Speak your idea, see it take shape, and
+              polish it into something students love.
             </p>
             <div className="flex flex-wrap gap-3 pt-2">
               <Link

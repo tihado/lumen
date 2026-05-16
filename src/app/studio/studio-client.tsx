@@ -419,8 +419,8 @@ export function StudioClient({
                 Studio
               </h1>
               <p className="max-w-2xl text-muted-foreground text-sm">
-                Turn a rough idea into a bright, editable lesson canvas with
-                every provider step out in the open.
+                The calm way to plan a lesson — every step visible, nothing
+                hidden.
               </p>
             </div>
           </div>
