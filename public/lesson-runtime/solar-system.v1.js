@@ -212,6 +212,22 @@ runtimeStyles.textContent = `
     box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
     backdrop-filter: blur(12px);
   }
+  [data-runtime="solar-system"] .toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    pointer-events: auto;
+  }
+  [data-runtime="solar-system"] .voice-toggle {
+    min-width: 104px;
+    border-color: rgba(103, 232, 249, .3);
+    pointer-events: auto;
+  }
+  [data-runtime="solar-system"] .voice-toggle[aria-pressed="true"] {
+    border-color: rgba(103, 232, 249, .86);
+    color: #ecfeff;
+    background: linear-gradient(180deg, rgba(103, 232, 249, .24), rgba(255, 209, 102, .08));
+  }
   [data-runtime="solar-system"] .planet-popover {
     position: absolute;
     left: 0;
@@ -1051,6 +1067,7 @@ const gravityNoteEl = document.getElementById("gravity-note");
 const factsEl = document.getElementById("planet-facts");
 const listEl = document.getElementById("planet-list");
 const resetBtn = document.getElementById("reset-view");
+let audioToggleBtn = document.getElementById("solar-audio-toggle");
 const popupPosition = new THREE.Vector3();
 const popupScreenPosition = new THREE.Vector3();
 const planetPopup = document.createElement("div");
@@ -1084,12 +1101,124 @@ const popupPeriodEl = planetPopup.querySelector("[data-popup-period]");
 const popupGravityEl = planetPopup.querySelector("[data-popup-gravity]");
 const popupGravityNoteEl = planetPopup.querySelector(".planet-popover-gravity");
 const popupCloseBtn = planetPopup.querySelector(".planet-popover-close");
+let voiceEnabled = false;
+let currentVoiceRequest = 0;
+let narrationObjectUrl = null;
+const narrationAudio = new Audio();
+narrationAudio.preload = "none";
+
+if (!audioToggleBtn) {
+  audioToggleBtn = document.createElement("button");
+  audioToggleBtn.className = "voice-toggle";
+  audioToggleBtn.id = "solar-audio-toggle";
+  audioToggleBtn.type = "button";
+  audioToggleBtn.setAttribute("aria-pressed", "false");
+  audioToggleBtn.textContent = "Voice off";
+  const toolbar = root.querySelector(".toolbar");
+  const actions = toolbar?.querySelector(".toolbar-actions") || toolbar;
+  actions?.appendChild(audioToggleBtn);
+}
 
 function getGravitySummary(body) {
   if (!(body.surfaceGravity || body.gravityComparedToEarth)) {
     return "—";
   }
   return [body.surfaceGravity, body.gravityComparedToEarth].filter(Boolean).join(" · ");
+}
+
+function getCurrentBody() {
+  if (selectedType === "sun") {
+    return sunInfo;
+  }
+  if (selectedType === "planet" && selectedId) {
+    return planets.find((item) => item.id === selectedId) || null;
+  }
+  return null;
+}
+
+function getOverviewNarration() {
+  return `${lesson.title || "Explore the Solar System"}. ${lesson.summary || "Observe the Sun and eight planets, then zoom in on each planet to learn its defining features."} Click the Sun or a planet to hear a short guided explanation.`;
+}
+
+function getNarrationText(body) {
+  if (!body) {
+    return getOverviewNarration();
+  }
+  const facts = Array.isArray(body.facts) ? body.facts.slice(0, 2) : [];
+  return [
+    body.name,
+    body.description,
+    `Gravity: ${getGravitySummary(body)}.`,
+    body.gravityNote,
+    ...facts,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function stopNarration() {
+  narrationAudio.pause();
+  narrationAudio.removeAttribute("src");
+  narrationAudio.load();
+  if (narrationObjectUrl) {
+    URL.revokeObjectURL(narrationObjectUrl);
+    narrationObjectUrl = null;
+  }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function updateVoiceButton() {
+  if (!audioToggleBtn) {
+    return;
+  }
+  audioToggleBtn.setAttribute("aria-pressed", String(voiceEnabled));
+  audioToggleBtn.textContent = voiceEnabled ? "Voice on" : "Voice off";
+  audioToggleBtn.title = voiceEnabled
+    ? "Turn narration off"
+    : "Turn narration on";
+}
+
+function speakWithBrowserVoice(text) {
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  utterance.rate = 0.94;
+  window.speechSynthesis.speak(utterance);
+}
+
+async function speakNarration(text) {
+  if (!voiceEnabled || !text) {
+    return;
+  }
+  const requestId = (currentVoiceRequest += 1);
+  stopNarration();
+  const audioUrl = `/api/audio?text=${encodeURIComponent(text.slice(0, 900))}`;
+  try {
+    const response = await fetch(audioUrl);
+    if (!response.ok) {
+      throw new Error(`TTS request failed with HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    if (requestId !== currentVoiceRequest || !voiceEnabled) {
+      return;
+    }
+    narrationObjectUrl = URL.createObjectURL(blob);
+    narrationAudio.src = narrationObjectUrl;
+    await narrationAudio.play();
+  } catch {
+    if (requestId === currentVoiceRequest && voiceEnabled) {
+      speakWithBrowserVoice(text);
+    }
+  }
+}
+
+function speakCurrentSelection() {
+  speakNarration(getNarrationText(getCurrentBody()));
 }
 
 function setActiveButton() {
@@ -1228,6 +1357,9 @@ function selectSun() {
   updateDetails(sunInfo);
   showPlanetPopup(sunInfo);
   setActiveButton();
+  if (voiceEnabled) {
+    speakCurrentSelection();
+  }
 }
 
 function selectPlanet(id) {
@@ -1248,6 +1380,9 @@ function selectPlanet(id) {
   showPlanetPopup(planet);
   desiredTarget.copy(mesh.position);
   setActiveButton();
+  if (voiceEnabled) {
+    speakCurrentSelection();
+  }
 }
 
 function resetView() {
@@ -1285,7 +1420,20 @@ function resetView() {
   }
   hidePlanetPopup();
   setActiveButton();
+  if (voiceEnabled) {
+    speakCurrentSelection();
+  }
 }
+
+audioToggleBtn?.addEventListener("click", () => {
+  voiceEnabled = !voiceEnabled;
+  updateVoiceButton();
+  if (voiceEnabled) {
+    speakCurrentSelection();
+  } else {
+    stopNarration();
+  }
+});
 
 if (listEl) {
   const sunButton = document.createElement("button");
