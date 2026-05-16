@@ -315,7 +315,7 @@ function scriptForHtml(value: string) {
   return value.replace(/<\/script/gi, "<\\/script");
 }
 
-function isSolarSystemPrompt(prompt: string) {
+export function isSolarSystemPrompt(prompt: string) {
   const lower = prompt.toLowerCase();
   return lower.includes("solar system");
 }

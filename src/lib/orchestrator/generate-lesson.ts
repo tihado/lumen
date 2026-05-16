@@ -9,7 +9,10 @@ import {
   uploadGeneratedBytesToS3,
 } from "@/lib/media/s3-storage";
 import { isSafeHttpsUrl } from "@/lib/url";
-import { createSandboxedLessonArtifact } from "../lesson/html-artifact";
+import {
+  createSandboxedLessonArtifact,
+  isSolarSystemPrompt,
+} from "../lesson/html-artifact";
 import {
   createGeneratingLesson,
   createGenerationRun,
@@ -142,6 +145,79 @@ function plannedMediaAssets(
   });
 }
 
+function solarSystemDemoPatches(): LessonPatchOp[] {
+  return [
+    {
+      op: "set_meta",
+      title: "Explore the Solar System",
+      gradeBand: "General audience",
+      durationMinutes: 20,
+    },
+    {
+      op: "add_node",
+      parentId: "root",
+      node: {
+        id: "obj-main",
+        type: "objectives",
+        title: "Learning objectives",
+        bullets: [
+          "Identify the Sun and the eight planets in our solar system.",
+          "Compare planets by distance, orbit, diameter, and gravity.",
+          "Use the interactive model to explain why gravity keeps planets in orbit.",
+        ],
+      },
+    },
+    {
+      op: "add_node",
+      parentId: "root",
+      node: {
+        id: "sec-overview",
+        type: "section",
+        title: "Interactive model",
+        children: [],
+      },
+    },
+    {
+      op: "add_node",
+      parentId: "sec-overview",
+      node: {
+        id: "txt-summary",
+        type: "text",
+        title: "What students will explore",
+        format: "markdown",
+        body: "Students rotate and zoom a 3D solar system, select the Sun or a planet, compare facts, and answer quick-check questions.",
+      },
+    },
+    {
+      op: "add_node",
+      parentId: "root",
+      node: {
+        id: "quiz-main",
+        type: "quiz",
+        title: "Quick check",
+        items: [
+          {
+            id: "q1",
+            stem: "What does a planet orbit in our solar system?",
+            choices: ["The Sun", "A comet", "Earth's Moon"],
+            answer: "The Sun",
+            explanation:
+              "Planets orbit the Sun because it contains almost all of the solar system's mass.",
+          },
+          {
+            id: "q2",
+            stem: "Which force helps keep planets moving in orbit?",
+            choices: ["Gravity", "Sound", "Friction"],
+            answer: "Gravity",
+            explanation:
+              "Gravity pulls each planet toward the Sun while forward motion keeps it in orbit.",
+          },
+        ],
+      },
+    },
+  ];
+}
+
 export async function* generateLessonStream(input: {
   transcript: string;
   lessonId?: string;
@@ -230,6 +306,61 @@ export async function* generateLessonStream(input: {
       gradeBand: "General audience",
       durationMinutes: 20,
     });
+
+    if (isSolarSystemPrompt(input.transcript)) {
+      const s0 = step();
+      yield providerStarted(s0, "orchestrator", "Solar system demo selected");
+
+      for (const p of solarSystemDemoPatches()) {
+        doc = applyLessonPatch(doc, p);
+        yield { type: "lesson_patch", runId, patch: p };
+        yield { type: "lesson_snapshot", runId, lesson: doc };
+      }
+
+      yield providerCompleted(
+        s0,
+        "orchestrator",
+        "Using bundled interactive solar system demo",
+        true
+      );
+
+      const s1 = step();
+      yield providerStarted(
+        s1,
+        "orchestrator",
+        "Persist sandboxed HTML lesson"
+      );
+      const demoPlan = fallbackLessonPlan({
+        topic: "Explore the Solar System",
+        entities: [],
+      });
+      const artifact = createSandboxedLessonArtifact({
+        prompt: input.transcript,
+        plan: demoPlan,
+      });
+      const persistCompleted = providerCompleted(
+        s1,
+        "orchestrator",
+        "Saved solar system demo lesson to Postgres"
+      );
+      await saveLessonVersion({
+        lessonId,
+        title: artifact.title,
+        html: artifact.html,
+        spec: createPersistedStudioSpec({
+          artifactSpec: artifact.spec,
+          lesson: doc,
+          timeline: studioTimeline,
+          runId,
+          transcript: input.transcript,
+          completedAt: new Date().toISOString(),
+        }),
+      });
+      await finishGenerationRun({ id: runId, status: "completed" });
+      yield persistCompleted;
+      yield { type: "run_completed", runId, lessonId };
+      return;
+    }
 
     const slngHint = describeSlngClientSetup(input.env);
     const s0 = step();
