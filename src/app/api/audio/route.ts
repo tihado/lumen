@@ -3,7 +3,7 @@ import { uploadGeneratedBytesToS3 } from "@/lib/media/s3-storage";
 import { slngTextToSpeech } from "@/lib/orchestrator/providers/slng";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 600;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",

@@ -7,7 +7,7 @@ import { getLessonWithCurrentVersion } from "@/lib/lesson/repository";
 import { generateLessonStream } from "@/lib/orchestrator/generate-lesson";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 600;
 
 export async function POST(
   request: Request,

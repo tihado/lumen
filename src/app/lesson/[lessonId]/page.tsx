@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FloatingLessonVoiceAgent } from "@/components/lesson-runtime/FloatingLessonVoiceAgent";
 import { SandboxedLessonFrame } from "@/components/lesson-runtime/SandboxedLessonFrame";
 import { buttonVariants } from "@/components/ui/button";
 import { solarSystemDemoArtifact } from "@/lib/lesson/demo-artifact";
@@ -6,6 +7,11 @@ import {
   getLessonWithCurrentVersion,
   type PersistedLessonWithVersion,
 } from "@/lib/lesson/repository";
+import { readStudioState } from "@/lib/lesson/studio-state";
+import {
+  contextFromLessonDocument,
+  type LessonVoiceAgentContext,
+} from "@/lib/lesson/voice-agent-context";
 import { cn } from "@/lib/utils";
 import { LessonPreviewClient } from "./lesson-preview-client";
 
@@ -36,6 +42,24 @@ export default async function LessonPage({
   }
 
   if (persisted?.lesson.renderMode === "sandboxed_html" && persisted.version) {
+    const studioState = readStudioState(persisted.version.spec, {
+      id: persisted.lesson.id,
+      prompt: persisted.lesson.prompt,
+      title: persisted.lesson.title,
+    });
+    const voiceContext: LessonVoiceAgentContext = studioState
+      ? contextFromLessonDocument(studioState.lesson, {
+          transcript: studioState.transcript,
+          demoMode: "sandboxed-lesson-guide",
+        })
+      : {
+          lessonId: persisted.lesson.id,
+          lessonTitle: persisted.lesson.title,
+          lessonSummary: persisted.lesson.prompt,
+          transcript: persisted.lesson.prompt,
+          demoMode: "sandboxed-lesson-guide",
+        };
+
     return (
       <div className="relative min-h-screen">
         <Link
@@ -51,6 +75,7 @@ export default async function LessonPage({
           html={persisted.version.html}
           title={persisted.lesson.title}
         />
+        <FloatingLessonVoiceAgent context={voiceContext} />
       </div>
     );
   }

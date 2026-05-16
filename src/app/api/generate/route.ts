@@ -7,7 +7,7 @@ import { generateLessonStream } from "@/lib/orchestrator/generate-lesson";
 import type { StreamEvent } from "@/lib/orchestrator/stream-events";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 600;
 
 function streamEvents(events: StreamEvent[], init?: ResponseInit) {
   const enc = new TextEncoder();

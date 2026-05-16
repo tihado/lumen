@@ -4,7 +4,7 @@ import type { LessonDocument } from "./schema";
 export const demoLessonFixture: LessonDocument = {
   schemaVersion: 1,
   id: "demo",
-  title: "Photosynthesis — Grade 6",
+  title: "Explore the Solar System — Grade 6",
   gradeBand: "Grade 6",
   durationMinutes: 20,
   language: "en",
@@ -12,10 +12,10 @@ export const demoLessonFixture: LessonDocument = {
   citations: [
     {
       id: "cit-1",
-      url: "https://example.edu/photosynthesis-overview",
-      title: "Photosynthesis overview (example)",
+      url: "https://science.nasa.gov/solar-system/",
+      title: "Solar System Exploration - NASA Science",
       excerpt:
-        "Plants use sunlight, water, and carbon dioxide to make sugar and oxygen.",
+        "Our solar system includes the Sun, eight planets, dwarf planets, moons, asteroids, and comets.",
       retrievedAt: new Date().toISOString(),
       provider: "tavily",
       nodeIds: ["txt-hook"],
@@ -40,8 +40,9 @@ export const demoLessonFixture: LessonDocument = {
       type: "objectives",
       title: "Learning objectives",
       bullets: [
-        "Explain what plants need for photosynthesis.",
-        "Describe what the plant makes and what it releases.",
+        "Explain why planets orbit the Sun.",
+        "Compare inner rocky planets with outer gas and ice giants.",
+        "Use scale clues to describe why space in the solar system is mostly empty.",
       ],
     },
     "sec-hook": {
@@ -55,7 +56,7 @@ export const demoLessonFixture: LessonDocument = {
       type: "text",
       title: "Wonder moment",
       format: "markdown",
-      body: "If you held your breath in a sealed jar of only plants, what do you think would happen over time—and **why**?",
+      body: "If the Sun suddenly disappeared, would Earth fly away immediately, keep circling, or do something stranger? Make a prediction, then explain what gravity has to do with it.",
       citationIds: ["cit-1"],
     },
     "media-cover": {
@@ -63,10 +64,10 @@ export const demoLessonFixture: LessonDocument = {
       type: "media",
       title: "Cover visual",
       modality: "image",
-      alt: "Stylized leaf with sunlight rays",
+      alt: "Illustration of planets orbiting a bright Sun",
       status: "ready",
       asset: {
-        url: "https://images.unsplash.com/photo-1465146633011-14f18e953b20?w=800&q=80",
+        url: "https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?w=900&q=80",
         mime: "image/jpeg",
       },
       provenance: {
@@ -85,36 +86,38 @@ export const demoLessonFixture: LessonDocument = {
       id: "txt-explain-1",
       type: "text",
       format: "markdown",
-      body: "**Photosynthesis** is how plants turn light energy into chemical energy (sugar) they can use to grow.",
+      title: "The Sun is the anchor",
+      body: "The **Sun** holds almost all the mass in the solar system, so its gravity acts like the anchor for planets, dwarf planets, asteroids, and comets.",
     },
     "txt-explain-2": {
       id: "txt-explain-2",
       type: "text",
       format: "markdown",
-      body: "Inputs: **sunlight**, **water**, **CO₂**. Outputs: **sugar (glucose)** and **oxygen**.",
+      title: "Two planet neighborhoods",
+      body: "The inner planets are mostly **rocky**: Mercury, Venus, Earth, and Mars. The outer planets are much larger **gas or ice giants**: Jupiter, Saturn, Uranus, and Neptune.",
     },
     "sec-practice": {
       id: "sec-practice",
       type: "section",
-      title: "Quick check",
+      title: "Orbit lab",
       children: ["act-1"],
     },
     "act-1": {
       id: "act-1",
       type: "activity",
-      title: "Classify inputs vs outputs",
+      title: "Classify planet neighborhoods",
       kind: "classification",
       instruction:
-        "Drag each label into Inputs or Outputs (tap to select in this demo).",
+        "Sort each planet into the inner rocky planets or the outer giants.",
       categories: [
-        { id: "in", label: "Inputs" },
-        { id: "out", label: "Outputs" },
+        { id: "inner", label: "Inner rocky planets" },
+        { id: "outer", label: "Outer giants" },
       ],
       items: [
-        { id: "i1", label: "Sunlight", categoryId: "in" },
-        { id: "i2", label: "Oxygen", categoryId: "out" },
-        { id: "i3", label: "Carbon dioxide", categoryId: "in" },
-        { id: "i4", label: "Sugar (glucose)", categoryId: "out" },
+        { id: "i1", label: "Mercury", categoryId: "inner" },
+        { id: "i2", label: "Mars", categoryId: "inner" },
+        { id: "i3", label: "Jupiter", categoryId: "outer" },
+        { id: "i4", label: "Neptune", categoryId: "outer" },
       ],
     },
     "quiz-1": {
@@ -124,11 +127,11 @@ export const demoLessonFixture: LessonDocument = {
       items: [
         {
           id: "q1",
-          stem: "Which gas do plants release during photosynthesis?",
-          choices: ["Carbon dioxide", "Oxygen", "Nitrogen"],
-          answer: "Oxygen",
+          stem: "What does every planet in our solar system orbit?",
+          choices: ["Earth", "The Sun", "The Moon"],
+          answer: "The Sun",
           explanation:
-            "Oxygen is a byproduct when plants split water using light energy.",
+            "The Sun has the strongest gravitational pull in the solar system because it contains almost all of the system's mass.",
         },
       ],
     },
@@ -137,7 +140,7 @@ export const demoLessonFixture: LessonDocument = {
       type: "reflection",
       title: "Exit ticket",
       prompt:
-        "Where could you see photosynthesis happening in your everyday life?",
+        "Choose one planet and explain how its place in the solar system affects what it is like.",
     },
   },
 };
