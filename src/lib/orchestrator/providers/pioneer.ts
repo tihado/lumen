@@ -18,15 +18,15 @@ export type ExtractedEntity = {
 
 const DEFAULT_PIONEER_MODEL = "fastino/gliner2-base-v1";
 const PIONEER_ENTITY_LABELS = [
-  "concept",
-  "term",
-  "misconception",
-  "process",
-  "object",
-  "relationship",
-  "measurement",
-  "person",
-  "place",
+  "lesson concept",
+  "domain vocabulary term",
+  "student misconception",
+  "ordered process or cycle",
+  "important object or component",
+  "cause effect relationship or comparison",
+  "measurement quantity unit date or duration",
+  "relevant person or group",
+  "relevant place setting or institution",
 ];
 
 function normalizeKind(value: unknown): ExtractedEntity["kind"] {
@@ -146,7 +146,7 @@ function collectEntities(
   }
 
   return Object.entries(record).flatMap(([kind, nested]) =>
-    PIONEER_ENTITY_LABELS.includes(kind) ? collectEntities(nested, kind) : []
+    normalizeKind(kind) === "other" ? [] : collectEntities(nested, kind)
   );
 }
 

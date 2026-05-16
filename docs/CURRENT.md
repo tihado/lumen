@@ -6,7 +6,7 @@
 
 ## Current product state
 
-Lumen is now beyond the original scaffold. The repository contains a working Next.js 16 App Router demo path for generating a structured lesson from a typed or browser-dictated prompt, streaming provider progress to the studio, rendering an editable teacher canvas, persisting a sandboxed HTML lesson version to Postgres, and opening a student-facing lesson page.
+Lumen is now beyond the original scaffold. The repository contains a working Next.js 16 App Router demo path for generating a structured lesson from a typed or browser-dictated prompt, streaming provider progress to the studio, rendering an editable teacher canvas, applying short canvas revision commands, persisting a sandboxed HTML lesson version to Postgres, and opening a student-facing lesson page.
 
 The current implementation is best described as a **provider-visible persisted demo MVP**. It has credible fallback behavior for most external providers, but the main generation flow still requires `DATABASE_URL` because `/api/generate` writes lessons, versions, and generation runs to Postgres.
 
@@ -61,14 +61,16 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
   1. create persisted lesson and generation run
   2. SLNG setup/readiness step
   3. Tavily search or fallback source cards
-  4. Pioneer extraction or heuristic extraction for lesson and sandbox schema data
+  4. Pioneer extraction or heuristic extraction for lesson planning inputs
   5. OpenAI lesson plan or deterministic fallback plan
-  6. materialize lesson nodes as patches
-  7. fal image generation or fallback image
-  8. fal queue-backed video generation or fallback video
-  9. SLNG narration audio or failed audio state
-  10. generated or fallback sandboxed lesson HTML/JavaScript runtime
-  11. persist sandboxed HTML lesson version
+  6. post-plan Pioneer extraction or heuristic merge for nested sandbox entity JSON
+  7. materialize lesson nodes as patches
+  8. fal image generation or fallback image
+  9. fal queue-backed video generation or fallback video
+  10. SLNG narration audio or failed audio state
+  11. generated or fallback sandboxed lesson HTML/JavaScript runtime
+  12. persist sandboxed HTML lesson version
+- Sandbox schema data is now a nested entity tree for the student presentation. It is derived from the teacher transcript, Tavily source excerpts, and the generated teaching plan; entity nesting is capped at five levels before validation and embedding.
 - fal image/video retries are available from selected media blocks through `/api/media`.
 - fal video generation uses `queue.fal.run` polling with a 175s local deadline and a 180s `/api/media` route duration budget.
 - Optional S3 mirroring exists for generated image, video, and audio assets.
@@ -99,12 +101,16 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
 - Quiz explanations can be edited when selected.
 - Media blocks show status, fal badges, image/video/audio previews, and retry controls.
 - Sources are inspectable through `SourcesDrawer`.
+- The studio includes a chat-style canvas revision path through `POST /api/canvas/update`. It uses an LLM revision helper when configured and a deterministic fallback note when OpenAI is unavailable.
 
 ### Student runtime
 
 - `/lesson/demo` renders a structured fixture with React runtime components.
 - Persisted generated lessons render through `SandboxedLessonFrame`.
 - `LessonPageShell` supports structured React rendering for the fixture/fallback route.
+- Static sandbox lessons include a fixed "Entity presentation map" section driven by `lesson-data.schemaData.entities`.
+- Entity presentation behavior is deterministic: hover/focus shows a floating summary, click expands into child entities, and right-click on empty presentation space collapses to the parent entity.
+- Entity trees support `label`, `kind`, optional `span`, optional `summary`, and optional recursive `children`, with a maximum nesting depth of five entity levels.
 - Student runtime components exist for:
   - quiz interaction
   - activity interaction
@@ -126,13 +132,14 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
 - SLNG server endpoints and TTS/STT provider adapters exist.
 - The studio does not yet wire SLNG realtime voice into `VoiceSessionController`.
 - There are no quick-action voice chips for edits like "add quiz", "shorter", or "regenerate image".
-- Voice commands do not yet apply patches to an existing lesson.
+- Voice commands do not yet apply patches to an existing lesson, although typed chat-style canvas revision commands now can.
 
 ### Canvas editing
 
 - Inline editing exists for text body, media alt text, and quiz explanations.
+- Short natural-language canvas revisions exist through `/api/canvas/update` and the studio chat panel.
 - There is no save/cancel editing mode.
-- Edits are local client updates only; they are not persisted back to Postgres.
+- Edits and chat revisions are local client updates only; they are not persisted back to Postgres as durable lesson versions.
 - Missing block-level teacher actions:
   - duplicate
   - delete
@@ -153,14 +160,14 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
 
 - Provider boundaries are visible in readiness badges and timeline rows.
 - Tavily citations are stored and displayed, but block-level source associations are limited.
-- Pioneer/GLiNER2 output influences fallback/LLM planning and is now available to generated sandbox runtimes as schema data, but extracted entities are not shown as a first-class visible metadata panel.
+- Pioneer/GLiNER2 output influences fallback/LLM planning and is now visible in generated sandbox lessons as a first-class nested entity presentation. Entity/source associations in the teacher canvas still need polish.
 - fal image generation uses direct fal model calls; fal video generation now uses queue submit/status/result polling. Provenance is stored, but retry provenance is simplified client-side.
 - LLM lesson planning validates through provider code and schema boundaries, but invalid-output repair behavior should be reviewed before demo.
 
 ### Student lesson runtime
 
 - The structured React runtime handles current schema node types and renders media nodes as image, video, or audio based on modality.
-- Generated persisted lessons use sandboxed HTML. Non-solar lessons expose a `lesson-data` JSON payload and LLM-authored safe JavaScript can enhance the validated static shell with topic-specific HTML, CSS, canvas/SVG, and schema-driven interactions.
+- Generated persisted lessons use sandboxed HTML. Non-solar lessons expose a `lesson-data` JSON payload, include a deterministic nested entity presentation, and may also run LLM-authored safe JavaScript that enhances the validated static shell with topic-specific HTML, CSS, canvas/SVG, and schema-driven interactions.
 - Student interaction events are not persisted.
 - Quiz/activity accessibility and keyboard coverage have not been verified.
 - Missing media gracefully shows fallback text in the structured runtime.
@@ -178,19 +185,19 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
 | --- | --- | --- |
 | 1. Stabilize core generation loop | Partial | Streaming and provider fallbacks exist, but no-key mode still fails without database configuration. |
 | 2. Persistence and share flow | Partial | Postgres persistence and lesson listing exist; missing DB handling and copy-link UX remain. |
-| 3. Canvas editing | Partial | Basic inline edits exist; persistence, save/cancel, reorder/delete/duplicate, and richer block edits remain. |
+| 3. Canvas editing | Partial | Basic inline edits and chat-style revision commands exist; persistence, save/cancel, reorder/delete/duplicate, and richer block edits remain. |
 | 4. Voice-first interaction | Early | Browser STT fallback exists; SLNG realtime and voice-driven edits remain. |
-| 5. Provider polish | Partial | Provider visibility exists and fal video is queue-backed; source/entity/media provenance still needs stronger UI. |
-| 6. Student runtime | Partial | Demo fixture and sandboxed generated lessons work; runtime consolidation and accessibility verification remain. |
+| 5. Provider polish | Partial | Provider visibility exists, fal video is queue-backed, and extracted entities drive a visible sandbox map; source/entity/media provenance still needs stronger teacher-canvas UI. |
+| 6. Student runtime | Partial | Demo fixture and sandboxed generated lessons work, including deterministic nested entity presentation; runtime consolidation and accessibility verification remain. |
 | 7. Export and demo closure | Early | Share link path exists; JSON/PDF export and demo checklist remain. |
-| 8. Quality gate | Partial | `pnpm test` and `pnpm exec tsc --noEmit` pass; Biome check passes for the touched fal/media files. Full build and manual smoke testing have not been run for this snapshot. |
+| 8. Quality gate | Partial | `pnpm vitest run`, `pnpm exec tsc --noEmit`, and targeted Biome checks pass for the current sandbox/entity changes. Full build and manual browser smoke testing have not been run for this snapshot. |
 
 ## Known risks
 
 - **Database is mandatory for generation.** The plan's "no-key local run creates a usable fallback lesson" is only true if Postgres is configured.
-- **Teacher edits are not durable.** Local canvas edits can be lost when opening the persisted lesson.
+- **Teacher edits are not durable.** Local canvas edits and chat revisions can be lost when opening the persisted lesson.
 - **Two student rendering paths exist.** Demo fixture uses structured React rendering; generated lessons use sandboxed HTML. This is workable for a demo but should be documented as an intentional architecture choice or consolidated.
-- **Generated sandbox quality is prompt-dependent.** The orchestrator now asks for solar-demo-level sandbox HTML/JavaScript enhancements, but visual verification still needs a manual or browser smoke pass.
+- **Generated sandbox quality is partly prompt-dependent.** The nested entity presentation is deterministic, but topic-specific theme/runtime enhancements remain generated and still need a manual or browser smoke pass.
 - **Voice story is still mostly fallback.** Browser dictation helps, but SLNG is not yet the primary client voice session.
 - **fal video can still fall back under real provider failure.** The queue path fixes direct-request timeout behavior, but content policy failures, exhausted credentials, provider outage, or jobs exceeding the local timeout still return the demo video.
 - **README is stale in one place.** It mentions a localStorage publish preview, but current code persists generated lessons through Postgres.
@@ -199,9 +206,9 @@ As of this snapshot, fal video generation has been moved from a long direct `fal
 
 1. Make missing `DATABASE_URL` an explicit, friendly state in `/api/generate`, `/studio`, and `/lessons`.
 2. Decide whether localStorage/no-DB fallback should remain a first-class demo path or whether Postgres is required.
-3. Persist teacher canvas edits through a lesson patch API.
+3. Persist teacher canvas edits and chat revisions through a lesson patch/version API.
 4. Add the visible post-generation share affordance: copy link and open lesson.
 5. Add quick-action edit chips that call the same patch/regeneration paths as manual edits.
-6. Surface Pioneer extracted entities and richer Tavily source associations in the UI.
+6. Surface richer Pioneer/Tavily entity-source associations in the teacher canvas.
 7. Implement JSON export as the reliable demo ending.
 8. Update README with the current Postgres-backed flow and a short demo checklist.

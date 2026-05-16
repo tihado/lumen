@@ -2,11 +2,13 @@
 
 import {
   BookOpenCheck,
+  Bot,
   ExternalLink,
   Home,
   LibraryBig,
   Loader2,
   Play,
+  Send,
   Sparkles,
   TriangleAlert,
   WandSparkles,
@@ -28,7 +30,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { VoiceSessionController } from "@/components/voice/VoiceSessionController";
+import { Textarea } from "@/components/ui/textarea";
 import type { DatabaseAvailability } from "@/lib/env";
 import { applyLessonPatch } from "@/lib/lesson/patches";
 import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
@@ -44,15 +46,11 @@ type LiveTimelineRow = Omit<StudioTimelineRow, "status"> & {
   status: StudioTimelineRow["status"] | "running";
 };
 
-function waitForTrailPaint() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(resolve, 450);
-      });
-    });
-  });
-}
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
 
 export function StudioClient({
   databaseAvailability,
@@ -67,6 +65,10 @@ export function StudioClient({
   );
   const [lesson, setLesson] = useState<LessonDocument | null>(null);
   const [timeline, setTimeline] = useState<LiveTimelineRow[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [activeChatMode, setActiveChatMode] = useState<
+    "generate" | "revise" | null
+  >(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -113,6 +115,14 @@ export function StudioClient({
         setLesson(state.lesson);
         setTimeline(state.timeline);
         setTranscript(state.transcript ?? state.lesson.title);
+        setChatMessages([
+          {
+            id: "loaded-lesson",
+            role: "assistant",
+            content:
+              "Loaded the saved lesson. Send a change request to revise the canvas.",
+          },
+        ]);
         setSavedLessonId(payload.lesson?.id ?? state.lesson.id);
         setSelectedId(null);
       } catch (e) {
@@ -181,106 +191,194 @@ export function StudioClient({
 
   useEffect(() => clearRunningTimers, [clearRunningTimers]);
 
-  const runGeneration = useCallback(async () => {
-    if (!databaseAvailability.configured) {
-      setError(databaseAvailability.message);
-      return;
-    }
-    clearRunningTimers();
-    setBusy(true);
-    setError(null);
-    setTimeline([]);
-    setLesson(null);
-    setSelectedId(null);
-    setSavedLessonId(null);
-    let completedLessonId: string | null = null;
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript, lessonId: savedLessonId }),
-      });
-      if (!(res.ok && res.body)) {
-        const t = await res.text();
-        throw new Error(t || `HTTP ${res.status}`);
+  const runGeneration = useCallback(
+    async (prompt: string) => {
+      if (!databaseAvailability.configured) {
+        setError(databaseAvailability.message);
+        return;
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const handleStreamEvent = (ev: StreamEvent) => {
-        if (ev.type === "provider_started") {
-          pushTimeline({
-            key: ev.stepId,
-            provider: ev.provider,
-            label: ev.label,
-            status: "started",
-          });
-          scheduleRunningTransition(ev.stepId);
+      const existingLessonId = savedLessonId;
+      clearRunningTimers();
+      setActiveChatMode("generate");
+      setBusy(true);
+      setError(null);
+      setTimeline([]);
+      setLesson(null);
+      setSelectedId(null);
+      setSavedLessonId(null);
+      let completedLessonId: string | null = null;
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript: prompt,
+            lessonId: existingLessonId,
+          }),
+        });
+        if (!(res.ok && res.body)) {
+          const t = await res.text();
+          throw new Error(t || `HTTP ${res.status}`);
         }
-        if (ev.type === "provider_completed") {
-          clearRunningTimer(ev.stepId);
-          pushTimeline({
-            key: ev.stepId,
-            provider: ev.provider,
-            label: "",
-            status: "completed",
-            detail: ev.detail,
-            usedFallback: ev.usedFallback,
-          });
-        }
-        if (ev.type === "lesson_snapshot") {
-          setLesson(ev.lesson);
-        }
-        if (ev.type === "run_failed") {
-          setError(ev.message);
-        }
-        if (ev.type === "run_completed") {
-          completedLessonId = ev.lessonId;
-          setSavedLessonId(ev.lessonId);
-        }
-      };
-      const handleStreamLine = (line: string) => {
-        const ev = parseStreamEventLine(line);
-        if (ev) {
-          handleStreamEvent(ev);
-        }
-      };
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          buffer += decoder.decode();
-          for (const line of buffer.split("\n")) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const handleStreamEvent = (ev: StreamEvent) => {
+          if (ev.type === "provider_started") {
+            pushTimeline({
+              key: ev.stepId,
+              provider: ev.provider,
+              label: ev.label,
+              status: "started",
+            });
+            scheduleRunningTransition(ev.stepId);
+          }
+          if (ev.type === "provider_completed") {
+            clearRunningTimer(ev.stepId);
+            pushTimeline({
+              key: ev.stepId,
+              provider: ev.provider,
+              label: "",
+              status: "completed",
+              detail: ev.detail,
+              usedFallback: ev.usedFallback,
+              problem: ev.problem,
+            });
+          }
+          if (ev.type === "lesson_snapshot") {
+            setLesson(ev.lesson);
+          }
+          if (ev.type === "run_failed") {
+            setError(ev.message);
+          }
+          if (ev.type === "run_completed") {
+            completedLessonId = ev.lessonId;
+            setSavedLessonId(ev.lessonId);
+          }
+        };
+        const handleStreamLine = (line: string) => {
+          const ev = parseStreamEventLine(line);
+          if (ev) {
+            handleStreamEvent(ev);
+          }
+        };
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            buffer += decoder.decode();
+            for (const line of buffer.split("\n")) {
+              handleStreamLine(line);
+            }
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
             handleStreamLine(line);
           }
-          break;
         }
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          handleStreamLine(line);
+        if (completedLessonId) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: `assistant-${Date.now()}`,
+              role: "assistant",
+              content:
+                "I built the first teaching plan in the canvas. Send another message to adjust it.",
+            },
+          ]);
         }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        clearRunningTimers();
+        setBusy(false);
+        setActiveChatMode(null);
       }
-      if (completedLessonId) {
-        await waitForTrailPaint();
-        router.push(`/lesson/${completedLessonId}`);
+    },
+    [
+      clearRunningTimer,
+      clearRunningTimers,
+      databaseAvailability,
+      pushTimeline,
+      savedLessonId,
+      scheduleRunningTransition,
+    ]
+  );
+
+  const reviseCanvasFromChat = useCallback(
+    async (instruction: string) => {
+      if (!lesson) {
+        return;
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      clearRunningTimers();
-      setBusy(false);
+      setActiveChatMode("revise");
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/canvas/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lesson, instruction }),
+        });
+        const payload = (await res.json().catch(() => null)) as {
+          lesson?: LessonDocument;
+          reply?: string;
+          error?: string;
+        } | null;
+        if (!(res.ok && payload?.lesson)) {
+          throw new Error(payload?.error ?? `HTTP ${res.status}`);
+        }
+        setLesson(payload.lesson);
+        setSavedLessonId(null);
+        setSelectedId(null);
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: payload.reply ?? "I updated the canvas plan.",
+          },
+        ]);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        setError(message);
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-error-${Date.now()}`,
+            role: "assistant",
+            content: `I could not update the canvas: ${message}`,
+          },
+        ]);
+      } finally {
+        setBusy(false);
+        setActiveChatMode(null);
+      }
+    },
+    [lesson]
+  );
+
+  const submitIdeaSpark = useCallback(async () => {
+    const message = transcript.trim();
+    if (!message) {
+      return;
     }
-  }, [
-    clearRunningTimer,
-    clearRunningTimers,
-    databaseAvailability,
-    pushTimeline,
-    router,
-    savedLessonId,
-    scheduleRunningTransition,
-    transcript,
-  ]);
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: message,
+      },
+    ]);
+    setTranscript("");
+    if (lesson) {
+      await reviseCanvasFromChat(message);
+      return;
+    }
+    await runGeneration(message);
+  }, [lesson, reviseCanvasFromChat, runGeneration, transcript]);
 
   const onReplaceNode = useCallback((node: LessonNode) => {
     setLesson((prev) => {
@@ -394,6 +492,16 @@ export function StudioClient({
     router.push(`/lesson/${savedLessonId}`);
   }, [router, savedLessonId]);
 
+  const hasStartedConversation =
+    chatMessages.some((message) => message.role === "user") || Boolean(lesson);
+  const idleSubmitLabel = hasStartedConversation
+    ? "Adding sugar & spice"
+    : "Make it magical";
+  const busySubmitLabel =
+    activeChatMode === "revise"
+      ? "Adding sugar & spice..."
+      : "Building the lesson...";
+
   return (
     <div className="relative mx-auto flex h-dvh min-h-0 w-full max-w-7xl flex-col gap-5 overflow-hidden p-3 sm:p-4">
       <div className="mask-[linear-gradient(to_bottom,black,transparent_88%)] pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.35_0.07_185/0.055)_1px,transparent_1px),linear-gradient(90deg,oklch(0.35_0.07_185/0.045)_1px,transparent_1px)] bg-size-[44px_44px]" />
@@ -468,22 +576,77 @@ export function StudioClient({
                 Idea spark
               </CardTitle>
               <CardDescription>
-                Dictate or type a lesson seed. The server keeps the keys and
-                handles the orchestration.
+                Chat with the planner to draft and revise the canvas.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <VoiceSessionController
+              <ScrollArea className="h-[220px] rounded-2xl border border-white/70 bg-white/70">
+                <div className="space-y-3 p-3">
+                  {chatMessages.length === 0 ? (
+                    <div className="flex gap-2 text-sm">
+                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Bot className="size-3.5" />
+                      </span>
+                      <div className="rounded-2xl bg-white px-3 py-2 text-muted-foreground shadow-sm">
+                        What lesson should we build first?
+                      </div>
+                    </div>
+                  ) : (
+                    chatMessages.map((message) => (
+                      <div
+                        className={cn(
+                          "flex gap-2 text-sm",
+                          message.role === "user" && "justify-end"
+                        )}
+                        key={message.id}
+                      >
+                        {message.role === "assistant" ? (
+                          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Bot className="size-3.5" />
+                          </span>
+                        ) : null}
+                        <div
+                          className={cn(
+                            "max-w-[86%] rounded-2xl px-3 py-2 shadow-sm",
+                            message.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-white text-muted-foreground"
+                          )}
+                        >
+                          {message.content}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+              <Textarea
+                className="min-h-[104px] resize-y rounded-2xl bg-white/85 text-sm"
                 disabled={busy}
-                onTranscriptChange={setTranscript}
-                transcript={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    submitIdeaSpark().catch(() => {
+                      /* errors handled inside submitIdeaSpark */
+                    });
+                  }
+                }}
+                placeholder={
+                  hasStartedConversation
+                    ? "Ask for changes, e.g. make the practice more hands-on and shorten the lecture."
+                    : "Example: 20-minute photosynthesis lesson for grade 6, hands-on, include a misconception check."
+                }
+                value={transcript}
               />
               <Button
                 className="h-10 w-full rounded-2xl bg-[linear-gradient(135deg,oklch(0.68_0.14_174),oklch(0.78_0.16_83))] text-sm shadow-[0_16px_34px_oklch(0.58_0.13_150/0.24)] hover:brightness-105"
-                disabled={busy || !databaseAvailability.configured}
+                disabled={
+                  busy || !databaseAvailability.configured || !transcript.trim()
+                }
                 onClick={() => {
-                  runGeneration().catch(() => {
-                    /* errors handled inside runGeneration */
+                  submitIdeaSpark().catch(() => {
+                    /* errors handled inside submitIdeaSpark */
                   });
                 }}
                 type="button"
@@ -491,12 +654,16 @@ export function StudioClient({
                 {busy ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Building the lesson...
+                    {busySubmitLabel}
                   </>
                 ) : (
                   <>
-                    <Sparkles className="size-4" />
-                    Make it magical
+                    {hasStartedConversation ? (
+                      <Send className="size-4" />
+                    ) : (
+                      <Sparkles className="size-4" />
+                    )}
+                    {idleSubmitLabel}
                   </>
                 )}
               </Button>
@@ -545,70 +712,104 @@ export function StudioClient({
                       </p>
                     </div>
                   ) : (
-                    timeline.map((row) => (
-                      <div
-                        className={cn(
-                          "relative w-full min-w-0 max-w-full overflow-hidden rounded-2xl border px-3 py-2.5 text-xs shadow-sm transition-transform hover:-translate-y-0.5",
-                          row.status === "completed"
-                            ? "border-primary/18 bg-[linear-gradient(135deg,white,oklch(0.96_0.045_150/0.76))]"
-                            : "border-accent/45 bg-[linear-gradient(135deg,white,oklch(0.965_0.055_75/0.72))]"
-                        )}
-                        key={row.key}
-                      >
-                        <div className="pointer-events-none absolute -top-5 -right-5 size-14 rounded-full bg-primary/8" />
-                        <div className="flex min-w-0 items-center justify-between gap-2">
-                          <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-                            <span
-                              className={cn(
-                                "size-2.5 shrink-0 rounded-full",
-                                row.status === "completed"
-                                  ? "bg-primary"
-                                  : "bg-accent",
-                                row.status === "running" && "studio-pulse"
-                              )}
-                            />
-                            <span className="min-w-0 truncate">
-                              {row.provider}
-                            </span>
-                          </span>
-                          <Badge
+                    timeline.map((row) => {
+                      const hasProblem = Boolean(
+                        row.usedFallback || row.problem
+                      );
+                      const statusLabel =
+                        row.status === "completed" && row.usedFallback
+                          ? "fallback"
+                          : row.status === "completed" && row.problem
+                            ? "review"
+                            : row.status;
+
+                      return (
+                        <div
+                          className={cn(
+                            "relative w-full min-w-0 max-w-full overflow-hidden rounded-2xl border px-3 py-2.5 text-xs shadow-sm transition-transform hover:-translate-y-0.5",
+                            hasProblem
+                              ? "border-yellow-500/45 bg-[linear-gradient(135deg,white,oklch(0.96_0.07_88/0.8))]"
+                              : row.status === "completed"
+                                ? "border-primary/18 bg-[linear-gradient(135deg,white,oklch(0.96_0.045_150/0.76))]"
+                                : "border-accent/45 bg-[linear-gradient(135deg,white,oklch(0.965_0.055_75/0.72))]"
+                          )}
+                          key={row.key}
+                        >
+                          <div
                             className={cn(
-                              "shrink-0",
-                              row.status === "running" &&
-                                "border-accent/70 bg-accent/15"
+                              "pointer-events-none absolute -top-5 -right-5 size-14 rounded-full",
+                              hasProblem ? "bg-yellow-500/10" : "bg-primary/8"
                             )}
-                            variant={
-                              row.status === "completed"
-                                ? "secondary"
-                                : "outline"
-                            }
-                          >
-                            {row.status === "running" ? (
-                              <Loader2 className="animate-spin" />
-                            ) : null}
-                            {row.status}
-                          </Badge>
+                          />
+                          <div className="flex min-w-0 items-center justify-between gap-2">
+                            <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+                              <span
+                                className={cn(
+                                  "size-2.5 shrink-0 rounded-full",
+                                  hasProblem
+                                    ? "bg-yellow-500"
+                                    : row.status === "completed"
+                                      ? "bg-primary"
+                                      : "bg-accent",
+                                  row.status === "running" && "studio-pulse"
+                                )}
+                              />
+                              <span className="min-w-0 truncate">
+                                {row.provider}
+                              </span>
+                            </span>
+                            <Badge
+                              className={cn(
+                                "shrink-0",
+                                row.status === "running" &&
+                                  "border-accent/70 bg-accent/15",
+                                hasProblem &&
+                                  "border-yellow-500/60 bg-yellow-100 text-yellow-950"
+                              )}
+                              variant={
+                                hasProblem
+                                  ? "outline"
+                                  : row.status === "completed"
+                                    ? "secondary"
+                                    : "outline"
+                              }
+                            >
+                              {row.status === "running" ? (
+                                <Loader2 className="animate-spin" />
+                              ) : null}
+                              {statusLabel}
+                            </Badge>
+                          </div>
+                          {row.label ? (
+                            <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-words text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
+                              {row.label}
+                            </p>
+                          ) : null}
+                          {row.detail ? (
+                            <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-words text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
+                              {row.detail}
+                            </p>
+                          ) : null}
+                          {hasProblem ? (
+                            <p className="mt-2 flex max-w-full items-start gap-1.5 overflow-hidden whitespace-normal break-words rounded-xl border border-yellow-500/30 bg-yellow-50/80 px-2 py-1.5 text-[10px] text-yellow-950">
+                              <TriangleAlert className="mt-0.5 size-3 shrink-0" />
+                              <span>
+                                {row.problem ??
+                                  "This step used a fallback path."}
+                              </span>
+                            </p>
+                          ) : null}
+                          {row.usedFallback === undefined ? null : (
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              Mode:{" "}
+                              {row.usedFallback
+                                ? "fallback / demo"
+                                : "live provider"}
+                            </p>
+                          )}
                         </div>
-                        {row.label ? (
-                          <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-all text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
-                            {row.label}
-                          </p>
-                        ) : null}
-                        {row.detail ? (
-                          <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-all text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
-                            {row.detail}
-                          </p>
-                        ) : null}
-                        {row.usedFallback === undefined ? null : (
-                          <p className="mt-1 text-[10px] text-muted-foreground">
-                            Mode:{" "}
-                            {row.usedFallback
-                              ? "fallback / demo"
-                              : "live provider"}
-                          </p>
-                        )}
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </ScrollArea>

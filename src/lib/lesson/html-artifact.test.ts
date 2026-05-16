@@ -3,6 +3,7 @@ import type { LessonPlan } from "@/lib/orchestrator/providers/llm";
 import {
   createSandboxedLessonArtifact,
   reviewSandboxedLessonArtifact,
+  sandboxedLessonSpecSchema,
   validateSandboxedLessonHtml,
   validateSandboxedLessonThemeCss,
 } from "./html-artifact";
@@ -139,6 +140,24 @@ const plan: LessonPlan = {
   ],
 };
 
+type TestNestedEntity = {
+  label: string;
+  kind: string;
+  summary: string;
+  children?: TestNestedEntity[];
+};
+
+function nestedEntityTree(level: number, maxLevel: number): TestNestedEntity {
+  return {
+    label: `Level ${level}`,
+    kind: "concept",
+    summary: `Summary for level ${level}`,
+    ...(level < maxLevel
+      ? { children: [nestedEntityTree(level + 1, maxLevel)] }
+      : {}),
+  };
+}
+
 describe("sandboxed lesson HTML", () => {
   it("creates a solar-system artifact with data and bundled runtime", () => {
     const artifact = createSandboxedLessonArtifact({
@@ -203,8 +222,18 @@ describe("sandboxed lesson HTML", () => {
       schemaData: {
         provider: "pioneer-gliner2",
         entities: [
-          { label: "photosynthesis", kind: "process" },
-          { label: "chlorophyll", kind: "term" },
+          {
+            label: "photosynthesis",
+            kind: "process",
+            summary: "Plants transform light energy into stored sugar.",
+            children: [
+              {
+                label: "chlorophyll",
+                kind: "term",
+                summary: "Green pigment that absorbs light.",
+              },
+            ],
+          },
         ],
       },
       runtimeScript:
@@ -212,10 +241,19 @@ describe("sandboxed lesson HTML", () => {
     });
 
     expect(artifact.spec.kind).toBe("static-lesson");
+    expect(() => sandboxedLessonSpecSchema.parse(artifact.spec)).not.toThrow();
     expect(artifact.html).toContain('data-runtime="static-lesson"');
     expect(artifact.html).toContain('id="lesson-data"');
     expect(artifact.html).toContain('id="lesson-runtime-script"');
     expect(artifact.html).toContain("pioneer-gliner2");
+    expect(artifact.html).toContain("Entity presentation map");
+    expect(artifact.html).toContain("data-entity-presenter");
+    expect(artifact.html).toContain("data-entity-space");
+    expect(artifact.html).toContain("data-entity-node");
+    expect(artifact.html).toContain("mouseenter");
+    expect(artifact.html).toContain("contextmenu");
+    expect(artifact.html).toContain('"children"');
+    expect(artifact.html).toContain("Green pigment that absorbs light.");
     expect(artifact.html).toContain("data-quiz-choice");
     expect(artifact.html).toContain("data-classify-choice");
     expect(artifact.html).toContain("photosynthesis.png");
@@ -231,6 +269,42 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).not.toContain(
       "Ask students what they notice in the night sky."
     );
+  });
+
+  it("caps static lesson entity nesting at five levels", () => {
+    const fiveLevelSpec = {
+      kind: "static-lesson",
+      title: "Nested entities",
+      prompt: "Teach nested entities",
+      summary: "Nested summary",
+      schemaData: {
+        provider: "pioneer-gliner2",
+        entities: [nestedEntityTree(1, 5)],
+      },
+    };
+    const sixLevelSpec = {
+      ...fiveLevelSpec,
+      schemaData: {
+        provider: "pioneer-gliner2",
+        entities: [nestedEntityTree(1, 6)],
+      },
+    };
+
+    expect(() => sandboxedLessonSpecSchema.parse(fiveLevelSpec)).not.toThrow();
+    expect(() => sandboxedLessonSpecSchema.parse(sixLevelSpec)).toThrow();
+
+    const artifact = createSandboxedLessonArtifact({
+      prompt: "I want to learn about photosynthesis",
+      plan: { ...plan, title: "Photosynthesis" },
+      schemaData: {
+        provider: "pioneer-gliner2",
+        entities: [nestedEntityTree(1, 6)],
+      },
+    });
+
+    expect(artifact.html).toContain("Level 5");
+    expect(artifact.html).not.toContain("Level 6");
+    expect(() => sandboxedLessonSpecSchema.parse(artifact.spec)).not.toThrow();
   });
 
   it("embeds a topic-specific generated theme for static lessons", () => {

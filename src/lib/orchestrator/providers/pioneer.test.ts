@@ -49,15 +49,15 @@ describe("pioneerExtract", () => {
       text: "Teach photosynthesis",
       schema: {
         entities: [
-          "concept",
-          "term",
-          "misconception",
-          "process",
-          "object",
-          "relationship",
-          "measurement",
-          "person",
-          "place",
+          "lesson concept",
+          "domain vocabulary term",
+          "student misconception",
+          "ordered process or cycle",
+          "important object or component",
+          "cause effect relationship or comparison",
+          "measurement quantity unit date or duration",
+          "relevant person or group",
+          "relevant place setting or institution",
         ],
       },
       threshold: 0.35,
@@ -77,7 +77,7 @@ describe("pioneerExtract", () => {
           output: {
             entities: {
               concept: ["ecosystem"],
-              term: [{ value: "habitat" }],
+              "domain vocabulary term": [{ value: "habitat" }],
             },
           },
         })

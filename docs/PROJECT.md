@@ -68,13 +68,13 @@ A voice-first AI web application that helps teachers create **editable multimedi
 | **OpenAI**                      | Structured generation    | Lesson JSON planning, utility generation, generated runtime script, fallback-friendly orchestration     |
 | **SLNG**                        | STT, TTS, realtime voice | Primary **human interface**; low-latency feedback; partial transcripts for UI                          |
 | **Tavily**                      | Web-aware search         | Retrieve **fresh** supporting material; reduce model hallucination for factual subjects                |
-| **Pioneer (Fastino) / GLiNER2** | Structured extraction    | Turn unstructured text (teacher + search results) into **typed entities** aligned to the lesson schema |
+| **Pioneer (Fastino) / GLiNER2** | Structured extraction    | Turn unstructured text (teacher + search results + generated plan) into **typed entities** aligned to the lesson schema and nested sandbox presentation data |
 | **fal**                         | Generative media         | Produce **images/video** assets bound to specific canvas nodes                                         |
 | **S3-compatible storage**        | Durable media URLs       | Optional mirror for generated images, videos, and TTS audio so shared lessons do not depend on ephemeral provider URLs |
 
 ### 2.6 Product summary & pitch (hackathon)
 
-**One-paragraph product:** A teacher speaks a lesson request. The app transcribes the voice (**SLNG**), researches supporting material (**Tavily**), extracts a structured lesson schema (**Pioneer / GLiNER2**), generates images and a short video (**fal**), and assembles everything into an **editable canvas** with text, image, video, quiz, and activity blocks. The teacher can then speak follow-up commands (“make it shorter,” “add a group activity,” “change the image style”) and the canvas updates live. Final output: **save** or **export**.
+**One-paragraph product:** A teacher speaks a lesson request. The app transcribes the voice (**SLNG**), researches supporting material (**Tavily**), extracts a structured lesson schema (**Pioneer / GLiNER2**), generates images and a short video (**fal**), and assembles everything into an **editable canvas** with text, image, video, quiz, activity blocks, and a student-facing sandbox presentation. The generated sandbox includes a nested entity map where students can hover for summaries, click into child entities, and right-click empty space to collapse back up. The teacher can then speak or type follow-up commands (“make it shorter,” “add a group activity,” “change the image style”) and the canvas updates locally. Final output: **save** or **export**.
 
 **Pitch line (judges / sticky note):** *“Other AI tools give teachers a wall of text. We give them an editable, multimedia lesson canvas — and they build it with their voice in 90 seconds.”*
 
@@ -351,6 +351,8 @@ sequenceDiagram
   PI-->>S: entities / slots
   S->>OA: structured lesson plan + runtime script
   OA-->>S: validated JSON / generated script
+  S->>PI: transcript + Tavily excerpts + generated plan
+  PI-->>S: refined sandbox entity JSON
   S->>S: merge + validate LessonDocument draft
   S-->>C: stream NDJSON events + lesson patches + citations
   S->>FA: media jobs per MediaBlock
@@ -368,9 +370,10 @@ sequenceDiagram
 ### 7.4 Pioneer / GLiNER2 integration
 
 - **Implementation references:** [Pioneer REST API overview](https://docs.pioneer.ai/api-reference/overview) and [fastino-ai/GLiNER2](https://github.com/fastino-ai/GLiNER2).
-- **Input:** bounded text (teacher transcript + selected Tavily excerpts), not the whole web.
-- **Output contract:** map to **slots** in your schema (e.g., `VocabularyTerm[]`, `KeyConcept[]`, `Misconception[]`).
-- **Failure mode:** if extraction is thin, fall back to LLM-only structuring but **flag** lower confidence in UI.
+- **Input:** bounded text (teacher transcript + selected Tavily excerpts), and for the sandbox pass, the generated teaching plan. Never send the whole web.
+- **Output contract:** map to **slots** in the lesson schema and a sandbox entity tree: `{ label, kind, span?, summary?, children? }`.
+- **Current sandbox constraint:** entity nesting is capped at **five entity levels** before validation and embedding. The page-level presentation root is a UI wrapper and does not count as an entity level.
+- **Failure mode:** if extraction is thin, fall back to heuristic entities and lesson-plan vocabulary while marking provider fallback state in the UI.
 
 ### 7.5 fal integration
 
@@ -398,11 +401,12 @@ flowchart LR
   D --> E[Tavily sources]
   E --> F[Entity extraction]
   F --> G[Lesson schema]
-  G --> H[Canvas patches]
-  H --> I[Student lesson website]
-  G --> J[Media prompts]
-  J --> K[fal assets]
-  K --> H
+  G --> H[Sandbox entity tree]
+  H --> I[Canvas patches]
+  I --> J[Student lesson website]
+  G --> K[Media prompts]
+  K --> L[fal assets]
+  L --> I
 ```
 
 | Stage                       | Input                  | Output                                          | Why it matters                                                                       |
@@ -411,11 +415,12 @@ flowchart LR
 | **2. Intent parsing**       | Transcript             | `LessonBrief`                                   | Converts natural language into constraints: topic, grade, duration, language, style. |
 | **3. Research planning**    | `LessonBrief`          | Tavily query set                                | Searches should be purposeful, not one generic query.                                |
 | **4. Source retrieval**     | Query set              | Ranked source cards                             | Creates factual grounding and references.                                            |
-| **5. Extraction**           | Transcript + excerpts  | Concepts, people, places, terms, misconceptions, processes, objects, relationships, measurements | Pioneer / GLiNER2 creates structured slots for lesson building and sandbox interactions. |
+| **5. Extraction**           | Transcript + excerpts  | Concepts, people, places, terms, misconceptions, processes, objects, relationships, measurements | Pioneer / GLiNER2 creates structured slots for lesson building and initial planning. |
 | **6. Pedagogical planning** | Brief + entities       | Learning path                                   | Decides sequence: hook, explanation, examples, practice, quiz, reflection.           |
-| **7. Media planning**       | Learning path          | Image/video prompts                             | Generates assets that serve a teaching goal, not decoration.                         |
-| **8. Canvas patching**      | Lesson schema + assets | Incremental UI patches                          | The teacher sees progress while long tasks continue.                                 |
-| **9. Student runtime**      | Final `LessonDocument` | Interactive website                             | Students can learn, answer, reveal hints, and receive feedback.                      |
+| **7. Sandbox schema merge** | Transcript + excerpts + learning path | Nested entity tree with summaries, max depth 5 | Makes Pioneer/GLiNER2 visibly drive the student sandbox presentation.                |
+| **8. Media planning**       | Learning path          | Image/video prompts                             | Generates assets that serve a teaching goal, not decoration.                         |
+| **9. Canvas patching**      | Lesson schema + assets | Incremental UI patches                          | The teacher sees progress while long tasks continue.                                 |
+| **10. Student runtime**     | Final `LessonDocument` + sandbox entity tree | Interactive website                             | Students can learn, answer, explore entities, reveal hints, and receive feedback.    |
 
 ### 7.8 How to make the lesson vivid
 
@@ -482,7 +487,7 @@ This keeps lesson content stable while still allowing analytics such as “70% o
 
 - **Tavily:** prefer `max_results: 3` and shallow `search_depth` for speed; show **count** in UI (“3 references found”) even if the visible references block is cut for time (§15.1).
 - **fal:** use the official serverless client where applicable; lower **poll interval** for queued jobs; **pre-warm** with a tiny dummy request on app load to reduce first-call cold start. For stage demos, **pre-generate** hero-topic image/video URLs and **swap in silently** if live generation exceeds a budget (e.g. 15s). **Stretch:** chain image→short video, or a style LoRA for consistent “classroom poster” look — only after the baseline image path is reliable.
-- **Pioneer / GLiNER2:** extraction SHOULD visibly drive at least one block (e.g. **Key terms**) so judges see structured extraction; if integration exceeds ~45 minutes, fall back to LLM-only entity extraction and document the tradeoff (prize vs. ship).
+- **Pioneer / GLiNER2:** extraction now visibly drives the sandbox entity presentation. Keep the entity JSON compact, summary-oriented, and capped at five nested levels; if the provider is unavailable, fall back to heuristic entities plus lesson-plan vocabulary so the sandbox map remains useful.
 - **SLNG:** prefer **streaming** transcript UX when the API supports it; **TTS** for one clarifying question is high-impact but **cuttable** if time-constrained.
 
 ---
@@ -504,6 +509,7 @@ Current implemented HTTP surfaces:
 | Method & path | Purpose |
 | ------------- | ------- |
 | `POST /api/generate` | NDJSON lesson generation stream; persists lesson/version/run records |
+| `POST /api/canvas/update` | Applies a short natural-language revision to the current lesson document and returns replacement patches/results |
 | `POST /api/media` | Regenerate image or video media for a block |
 | `GET /api/audio`, `POST /api/audio` | SLNG TTS bytes or S3 redirect where available |
 | `POST /api/voice/transcribe` | Server-side SLNG STT endpoint |
@@ -539,9 +545,9 @@ For the **lesson creation workspace**, the server orchestrator SHOULD stream **d
 | --------------- | --------------------- | -------- |
 | `planned`       | `{ intent: … }`       | Voice-to-intent / lesson brief validated. |
 | `researched`    | `{ references: … }`   | Tavily results available (may still run in parallel with schema). |
-| `schema`        | `{ entities: … }`     | GLiNER2 / Pioneer extraction merged. |
+| `schema`        | `{ entities: … }`     | GLiNER2 / Pioneer extraction merged; sandbox entities may be recursive with max depth 5. |
 | `canvas_init`   | `{ elements: … }`     | Skeleton canvas: blocks with placeholders, prompts, and **stable block ids**. |
-| `canvas_patch`  | `{ patch: … }`        | Optional incremental JSON Patch for late-arriving text tweaks. |
+| `canvas_patch`  | `{ patch: … }`        | Optional incremental `LessonPatchOp` or JSON Patch-style update for late-arriving text tweaks. |
 | `media`         | `{ blockId, type, url?, status?, error? }` | Per-block fal completion or failure. |
 | `runtime`       | `{ mode: "sandboxed_html", schemaData?, status }` | Generated or fallback sandbox HTML/JavaScript runtime is ready to persist. |
 | `error`         | `{ code, message, recoverable? }` | User-visible or toast; client may fall back to typed flow. |
@@ -549,7 +555,7 @@ For the **lesson creation workspace**, the server orchestrator SHOULD stream **d
 
 **Orchestration note:** for **latency**, Tavily search and GLiNER2 extraction MAY run **in parallel** after `planned`; emit `researched` / `schema` as each completes (order not guaranteed—client should merge by event type, not assume sequence).
 
-**Voice edits (post-canvas):** a separate **`POST /api/canvas/update`** (non-streaming or short SSE) applies **JSON Patch** (§6.3) from a dedicated “canvas edit” prompt; keep orchestration paths distinct from initial generation.
+**Voice edits (post-canvas):** a separate **`POST /api/canvas/update`** applies the same custom `LessonPatchOp` style used by the lesson reducer from a dedicated “canvas edit” prompt; keep orchestration paths distinct from initial generation. Current implementation is non-streaming and updates the client-side canvas state only.
 
 ---
 
@@ -596,7 +602,7 @@ Student runtime components:
 - **`ReflectionPrompt`**: captures open-ended response.
 - **`SourcePopover`**: shows short citations when factual claims need trust.
 
-Generated lessons may also publish a sandboxed HTML artifact. The sandbox shell should include safe lesson JSON (`lesson-data`) and may run LLM-authored vanilla JavaScript that creates additional DOM, CSS, SVG, or Canvas 2D interactions. The quality bar is the bundled solar-system demo: topic-specific visualization, responsive layout, meaningful animation, immediate feedback, and no network/storage/import/eval behavior. Pioneer / GLiNER2 schema data should be available to that runtime when it can drive a concept map, process simulator, timeline, sorting lab, vocabulary hotspot, measurement comparison, or relationship visualization.
+Generated lessons may also publish a sandboxed HTML artifact. The sandbox shell includes safe lesson JSON (`lesson-data`) and, for non-solar lessons, a deterministic **Entity presentation map** driven by `schemaData.entities`. Each entity supports `label`, `kind`, optional `span`, optional `summary`, and optional `children`; nesting is capped at five entity levels. The fixed presentation behavior is: hover/focus shows a floating summary, click expands into child entities, and right-click on empty presentation space collapses to the parent entity. The sandbox may also run LLM-authored vanilla JavaScript that creates additional DOM, CSS, SVG, or Canvas 2D interactions. The quality bar is the bundled solar-system demo: topic-specific visualization, responsive layout, meaningful animation, immediate feedback, and no network/storage/import/eval behavior.
 
 Teacher edit components and student runtime components should share schema types but not UI state. This avoids leaking draft-only controls into the public lesson.
 
@@ -740,7 +746,7 @@ There are two implementation options.
 | **Dynamic website**          | `/lesson/[lessonId]` fetches `LessonDocument` at request time.        | Hackathon MVP; fastest to build.            |
 | **Static published website** | Publish step snapshots the document into a versioned static artifact. | Stable sharing; fewer runtime dependencies. |
 
-Current path: generated lessons are persisted as versioned lesson records and rendered through `/lesson/[lessonId]`, with sandboxed HTML for generated artifacts and structured React rendering for fixtures/fallbacks. Dynamic structured rendering and static/sandboxed publishing remain architectural options to consolidate later.
+Current path: generated lessons are persisted as versioned lesson records and rendered through `/lesson/[lessonId]`, with sandboxed HTML for generated artifacts and structured React rendering for fixtures/fallbacks. Non-solar sandbox artifacts now include a fixed nested entity presentation map in addition to any LLM-authored runtime enhancement. Dynamic structured rendering and static/sandboxed publishing remain architectural options to consolidate later.
 
 Minimal target folder structure:
 
@@ -778,10 +784,11 @@ A published lesson website should have a predictable structure:
 1. **Hero section:** topic, grade, duration, learning goals, generated cover image.
 2. **Warm-up:** a prediction question or scenario.
 3. **Concept sections:** each section has explanation, visual, example, and quick check.
-4. **Interactive activity:** matching, ordering, classification, simulation-like prompt, or worksheet-style exercise.
-5. **Quiz:** short formative assessment with explanations.
-6. **Reflection:** “What did you learn?” or “Where would you see this in real life?”
-7. **Sources:** teacher-visible or student-visible citations, depending on age and subject.
+4. **Entity presentation map:** nested Pioneer/GLiNER2 entities with hover summaries, click-to-expand child entities, and right-click collapse to parent.
+5. **Interactive activity:** matching, ordering, classification, simulation-like prompt, or worksheet-style exercise.
+6. **Quiz:** short formative assessment with explanations.
+7. **Reflection:** “What did you learn?” or “Where would you see this in real life?”
+8. **Sources:** teacher-visible or student-visible citations, depending on age and subject.
 
 ### 10.6 Interaction patterns to support first
 
@@ -845,7 +852,7 @@ The system should avoid complex games in the first version. Simple interactions 
 2. **Student website renderer:** render a sample `LessonDocument` at `/lesson/[lessonId]` before adding AI.
 3. **Text-only generation path:** transcript in → lesson plan out → blocks + interactions.
 4. **Add Tavily:** citations pane + grounded text blocks.
-5. **Add extraction:** Pioneer/GLiNER2 fills structured lesson and sandbox-runtime slots; compare with LLM-only baseline.
+5. **Add extraction:** Pioneer/GLiNER2 fills structured lesson slots and nested sandbox entity presentation data; compare with LLM-only or heuristic baseline.
 6. **Add fal:** image per section; then video where time allows.
 7. **Add SLNG:** replace typed transcript with real voice for demo path.
 8. **Publish flow:** teacher clicks “Publish as website” and receives a shareable lesson URL.
@@ -863,8 +870,8 @@ Ordered so each step is **individually demoable**; if time runs out, the demo de
 | **2 — Voice in** | ~45 min | `VoicePanel` + `MediaRecorder` → `POST /api/voice/transcribe` → SLNG; transcript UI. |
 | **3 — Orchestrator + SSE** | ~50 min | `POST /api/lesson/orchestrate` streams §8.4 events; client updates store; **parallel** Tavily + GLiNER2 after `planned`. |
 | **4 — fal media** | ~40 min | Image + optional video; placeholders + retries; pre-baked fallbacks for stage. |
-| **5 — GLiNER2** | ~30 min | Wired extraction feeding at least **Key terms** block; LLM fallback documented. |
-| **6 — Voice edit** | ~40 min | `POST /api/canvas/update` + JSON Patch; **pre-bake** 2–3 commands for the demo script (§4.6). |
+| **5 — GLiNER2** | ~30 min | Wired extraction feeding **Key terms** and the sandbox entity presentation; heuristic fallback documented. |
+| **6 — Voice edit** | ~40 min | `POST /api/canvas/update` + `LessonPatchOp` replacements; **pre-bake** 2–3 commands for the demo script (§4.6). |
 | **7 — Tavily polish** | ~20 min | References strip + voice-panel research line. |
 | **8 — PDF export** | ~20 min | html2pdf / print route — demo closer. |
 | **9 — Rehearsal** | ~25 min | Three full dry runs + backup screen recording. |

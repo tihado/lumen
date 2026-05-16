@@ -24,6 +24,7 @@ export type StudioTimelineRow = {
   status: "started" | "completed" | "failed";
   detail?: string;
   usedFallback?: boolean;
+  problem?: string;
 };
 
 export type StreamEvent =
@@ -47,6 +48,7 @@ export type StreamEvent =
       provider: ProviderId;
       detail?: string;
       usedFallback?: boolean;
+      problem?: string;
     }
   | { type: "lesson_patch"; runId: string; patch: LessonPatchOp }
   | { type: "lesson_snapshot"; runId: string; lesson: LessonDocument }

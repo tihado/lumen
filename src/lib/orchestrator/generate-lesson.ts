@@ -65,6 +65,10 @@ function topicFromTranscript(transcript: string): string {
   return line.slice(0, 160).trim();
 }
 
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function citationsFromTavily(
   results: { title?: string; url: string; content: string }[],
   nodeHint: string
@@ -82,6 +86,200 @@ function citationsFromTavily(
       provider: "tavily" as const,
       nodeIds: i === 0 ? [nodeHint] : undefined,
     }));
+}
+
+type SandboxEntityNode = {
+  label: string;
+  kind: ExtractedEntity["kind"];
+  span?: string;
+  summary?: string;
+  children?: SandboxEntityNode[];
+};
+
+const MAX_SANDBOX_ENTITY_NESTING_LEVEL = 5;
+
+function compactSummary(value: string | undefined, maxLength = 190) {
+  const compact = value?.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return;
+  }
+  return compact.length > maxLength
+    ? `${compact.slice(0, maxLength - 3).trimEnd()}...`
+    : compact;
+}
+
+function normalizedEntityLabel(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function textMentionsEntity(text: string | undefined, label: string) {
+  const normalizedText = normalizedEntityLabel(text ?? "");
+  const normalizedLabel = normalizedEntityLabel(label);
+  return (
+    normalizedLabel.length > 0 &&
+    ` ${normalizedText} `.includes(` ${normalizedLabel} `)
+  );
+}
+
+function dedupeSandboxEntityNodes(nodes: SandboxEntityNode[]) {
+  const seen = new Set<string>();
+  return nodes.filter((node) => {
+    const key = `${node.kind}:${normalizedEntityLabel(node.label)}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function limitSandboxEntityNodes(
+  nodes: SandboxEntityNode[],
+  level = 1
+): SandboxEntityNode[] {
+  return nodes.map((node) => {
+    const children =
+      level < MAX_SANDBOX_ENTITY_NESTING_LEVEL && node.children
+        ? limitSandboxEntityNodes(node.children, level + 1)
+        : [];
+    return {
+      label: node.label,
+      kind: node.kind,
+      ...(node.span ? { span: node.span } : {}),
+      ...(node.summary ? { summary: node.summary } : {}),
+      ...(children.length > 0 ? { children } : {}),
+    };
+  });
+}
+
+function sandboxEntityExtractionText(input: {
+  transcript: string;
+  searchResults: { title?: string; content: string }[];
+  plan: LessonPlan;
+}) {
+  const planSummary = {
+    title: input.plan.title,
+    objectives: input.plan.objectives,
+    keyVocabulary: input.plan.keyVocabulary,
+    explanationSections: input.plan.explanationSections,
+    workedExample: input.plan.workedExample,
+    activity: input.plan.activity,
+    quiz: input.plan.quiz,
+    reflectionPrompt: input.plan.reflectionPrompt,
+  };
+  return [
+    input.transcript,
+    input.searchResults
+      .map((result) => `${result.title ?? "Source"}\n${result.content}`)
+      .join("\n\n"),
+    JSON.stringify(planSummary),
+  ]
+    .join("\n\n---\n\n")
+    .slice(0, 12_000);
+}
+
+function buildSandboxPresentationEntities(input: {
+  topic: string;
+  entities: ExtractedEntity[];
+  plan: LessonPlan;
+  searchResults: { title?: string; content: string }[];
+}): SandboxEntityNode[] {
+  const seededEntities: ExtractedEntity[] = [...input.entities];
+  const seen = new Set(
+    seededEntities.map((entity) => normalizedEntityLabel(entity.label))
+  );
+
+  for (const item of input.plan.keyVocabulary) {
+    const key = normalizedEntityLabel(item.term);
+    if (!seen.has(key)) {
+      seen.add(key);
+      seededEntities.push({
+        label: item.term,
+        kind: "term",
+        span: item.definition,
+      });
+    }
+  }
+
+  if (seededEntities.length === 0) {
+    seededEntities.push({
+      label: input.topic,
+      kind: "concept",
+      span: input.plan.hookBody,
+    });
+  }
+
+  const nodes = seededEntities.slice(0, 18).map((entity): SandboxEntityNode => {
+    const vocabulary = input.plan.keyVocabulary.find((item) =>
+      textMentionsEntity(item.term, entity.label)
+    );
+    const explanationMatches = input.plan.explanationSections
+      .filter(
+        (section) =>
+          textMentionsEntity(section.title, entity.label) ||
+          textMentionsEntity(section.body, entity.label)
+      )
+      .slice(0, 2);
+    const sourceMatches = input.searchResults
+      .filter((result) => textMentionsEntity(result.content, entity.label))
+      .slice(0, 2);
+    const practiceItems = [
+      ...input.plan.activity.strongItems,
+      ...input.plan.activity.weakItems,
+    ]
+      .filter((item) => textMentionsEntity(item, entity.label))
+      .slice(0, 2);
+
+    const children = dedupeSandboxEntityNodes([
+      ...(vocabulary
+        ? [
+            {
+              label: `Meaning of ${vocabulary.term}`,
+              kind: "term" as const,
+              summary: compactSummary(vocabulary.definition),
+            },
+          ]
+        : []),
+      ...explanationMatches.map((section) => ({
+        label: section.title,
+        kind: "relationship" as const,
+        summary: compactSummary(section.body),
+      })),
+      ...sourceMatches.map((result, index) => ({
+        label: result.title ?? `Tavily source ${index + 1}`,
+        kind: "relationship" as const,
+        summary: compactSummary(result.content),
+      })),
+      ...practiceItems.map((item) => ({
+        label: item,
+        kind: "object" as const,
+        summary: compactSummary(
+          `${item} appears in the practice lab for ${input.plan.activity.title}.`
+        ),
+      })),
+    ]);
+
+    const summary =
+      compactSummary(vocabulary?.definition) ??
+      compactSummary(entity.span) ??
+      compactSummary(sourceMatches[0]?.content) ??
+      compactSummary(
+        `${entity.label} is a ${entity.kind} extracted for ${input.plan.title}.`
+      );
+
+    return {
+      label: entity.label,
+      kind: entity.kind,
+      ...(entity.span ? { span: entity.span } : {}),
+      ...(summary ? { summary } : {}),
+      ...(children.length > 0 ? { children } : {}),
+    };
+  });
+
+  return limitSandboxEntityNodes(dedupeSandboxEntityNodes(nodes));
 }
 
 type PlannedMediaAsset = LessonPlan["mediaPlan"]["assets"][number] & {
@@ -174,13 +372,15 @@ export async function* generateLessonStream(input: {
     stepId: string,
     provider: ProviderId,
     detail?: string,
-    usedFallback?: boolean
+    usedFallback?: boolean,
+    problem?: string
   ): StreamEvent => {
     const existing = studioTimeline.find((row) => row.key === stepId);
     if (existing) {
       existing.status = "completed";
       existing.detail = detail;
       existing.usedFallback = usedFallback;
+      existing.problem = problem;
     } else {
       studioTimeline.push({
         key: stepId,
@@ -189,6 +389,7 @@ export async function* generateLessonStream(input: {
         status: "completed",
         detail,
         usedFallback,
+        problem,
       });
     }
     return {
@@ -198,6 +399,7 @@ export async function* generateLessonStream(input: {
       provider,
       detail,
       usedFallback,
+      problem,
     };
   };
 
@@ -236,11 +438,22 @@ export async function* generateLessonStream(input: {
     const slngHint = describeSlngClientSetup(input.env);
     const s0 = step();
     yield providerStarted(s0, "slng", "Voice / transcript intake");
-    yield providerCompleted(s0, "slng", slngHint.hint, !slngHint.ready);
+    yield providerCompleted(
+      s0,
+      "slng",
+      slngHint.hint,
+      !slngHint.ready,
+      slngHint.ready
+        ? undefined
+        : "SLNG_API_KEY and SLNG_API_BASE_URL are not configured; using the typed or browser transcript path."
+    );
 
     const s1 = step();
     yield providerStarted(s1, "tavily", "Web-aware research (Tavily)");
     let tavilyUsedFallback = !input.readiness.tavily;
+    let tavilyProblem = tavilyUsedFallback
+      ? "TAVILY_API_KEY is missing; using curated demo source cards."
+      : undefined;
     let searchResults = fallbackTavilyResults(topic);
     if (input.readiness.tavily) {
       try {
@@ -264,17 +477,21 @@ export async function* generateLessonStream(input: {
         if (searchResults.length === 0) {
           searchResults = fallbackTavilyResults(topic);
           tavilyUsedFallback = true;
+          tavilyProblem =
+            "Tavily returned no source cards; using curated demo source cards.";
         }
-      } catch {
+      } catch (error) {
         searchResults = fallbackTavilyResults(topic);
         tavilyUsedFallback = true;
+        tavilyProblem = `Tavily search failed: ${errorMessage(error)}`;
       }
     }
     yield providerCompleted(
       s1,
       "tavily",
       `${searchResults.length} source cards`,
-      tavilyUsedFallback
+      tavilyUsedFallback,
+      tavilyProblem
     );
 
     const hookTextId = "txt-hook";
@@ -294,34 +511,44 @@ export async function* generateLessonStream(input: {
       );
     let entities: ExtractedEntity[] = [];
     let pioneerFallback = !input.readiness.pioneer;
+    let pioneerProblem = pioneerFallback
+      ? "PIONEER_API_URL or PIONEER_API_KEY is missing; using heuristic entity extraction."
+      : undefined;
     if (input.readiness.pioneer) {
       try {
         entities = await pioneerExtract(extractInput, input.env);
         if (entities.length === 0) {
           entities = heuristicExtract(topic);
           pioneerFallback = true;
+          pioneerProblem =
+            "Pioneer / GLiNER2 returned no entities; using heuristic entity extraction.";
         }
-      } catch {
+      } catch (error) {
         entities = heuristicExtract(topic);
         pioneerFallback = true;
+        pioneerProblem = `Pioneer / GLiNER2 extraction failed: ${errorMessage(error)}`;
       }
     } else {
       entities = heuristicExtract(topic);
     }
-    const schemaDataProvider = pioneerFallback
+    let schemaDataProvider = pioneerFallback
       ? ("heuristic" as const)
       : ("pioneer-gliner2" as const);
     yield providerCompleted(
       s2,
       "pioneer",
       `${entities.length} extracted schema entities`,
-      pioneerFallback
+      pioneerFallback,
+      pioneerProblem
     );
 
     const s3 = step();
     yield providerStarted(s3, "llm", "AI lesson composition (AI SDK)");
 
     let llmUsedFallback = !input.readiness.llm;
+    let llmProblem = llmUsedFallback
+      ? "OPENAI_API_KEY is missing; using the deterministic lesson planner."
+      : undefined;
     let lessonPlan = fallbackLessonPlan({ topic, entities });
     let lessonModel = input.env.OPENAI_MODEL ?? "gpt-5";
     if (input.readiness.llm) {
@@ -336,9 +563,10 @@ export async function* generateLessonStream(input: {
         lessonPlan = generated.plan;
         lessonModel = generated.model;
         llmUsedFallback = false;
-      } catch {
+      } catch (error) {
         lessonPlan = fallbackLessonPlan({ topic, entities });
         llmUsedFallback = true;
+        llmProblem = `OpenAI lesson planning failed: ${errorMessage(error)}`;
       }
     }
     yield providerCompleted(
@@ -347,7 +575,56 @@ export async function* generateLessonStream(input: {
       llmUsedFallback
         ? "Deterministic lesson fallback"
         : `Structured plan via OpenAI ${lessonModel}`,
-      llmUsedFallback
+      llmUsedFallback,
+      llmProblem
+    );
+
+    const sSchema = step();
+    yield providerStarted(
+      sSchema,
+      "pioneer",
+      "Build nested sandbox entity JSON"
+    );
+    let sandboxEntities = entities;
+    let sandboxSchemaUsedFallback = pioneerFallback;
+    let sandboxSchemaProblem = pioneerFallback ? pioneerProblem : undefined;
+    if (input.readiness.pioneer) {
+      try {
+        const refinedEntities = await pioneerExtract(
+          sandboxEntityExtractionText({
+            transcript: input.transcript,
+            searchResults,
+            plan: lessonPlan,
+          }),
+          input.env
+        );
+        if (refinedEntities.length > 0) {
+          sandboxEntities = refinedEntities;
+          schemaDataProvider = "pioneer-gliner2";
+          sandboxSchemaUsedFallback = false;
+          sandboxSchemaProblem = undefined;
+        } else {
+          sandboxSchemaUsedFallback = true;
+          sandboxSchemaProblem =
+            "Pioneer / GLiNER2 returned no post-plan entities; using earlier extraction and lesson-plan vocabulary.";
+        }
+      } catch (error) {
+        sandboxSchemaUsedFallback = true;
+        sandboxSchemaProblem = `Post-plan Pioneer / GLiNER2 extraction failed: ${errorMessage(error)}`;
+      }
+    }
+    const sandboxPresentationEntities = buildSandboxPresentationEntities({
+      topic,
+      entities: sandboxEntities,
+      plan: lessonPlan,
+      searchResults,
+    });
+    yield providerCompleted(
+      sSchema,
+      "pioneer",
+      `${sandboxPresentationEntities.length} top-level sandbox entity nodes`,
+      sandboxSchemaUsedFallback,
+      sandboxSchemaProblem
     );
 
     const s4 = step();
@@ -661,6 +938,9 @@ export async function* generateLessonStream(input: {
               ].join(" ");
 
         let usedFallback = !input.readiness.fal;
+        let problem = usedFallback
+          ? "FAL_KEY or FAL_API_KEY is missing; using demo media assets."
+          : undefined;
         let generated =
           planned.modality === "image"
             ? fallbackFalImage(`${topic}-${planned.nodeId}`)
@@ -697,6 +977,7 @@ export async function* generateLessonStream(input: {
                 ? fallbackFalImage(`${topic}-${planned.nodeId}`)
                 : fallbackFalVideo(`${topic}-${planned.nodeId}`);
             usedFallback = true;
+            problem = `fal ${planned.modality} generation failed for ${planned.title}: ${errorMessage(error)}`;
           }
         }
 
@@ -755,7 +1036,7 @@ export async function* generateLessonStream(input: {
           },
         };
 
-        return { node, usedFallback, url: stored.url };
+        return { node, usedFallback, url: stored.url, problem };
       })
     );
 
@@ -773,13 +1054,21 @@ export async function* generateLessonStream(input: {
       s5,
       "fal",
       generatedMedia.map((item) => item.url).join(", "),
-      generatedMedia.some((item) => item.usedFallback)
+      generatedMedia.some((item) => item.usedFallback),
+      generatedMedia
+        .map((item) => item.problem)
+        .filter(Boolean)
+        .join(" ")
+        .slice(0, 600) || undefined
     );
 
     const s7 = step();
     yield providerStarted(s7, "slng", "Narration audio (SLNG)");
     const narrationText = lessonPlan.explanationBody.slice(0, 900);
     let audioUsedFallback = !input.readiness.slng;
+    let audioProblem = audioUsedFallback
+      ? "SLNG API is not configured; narration audio is unavailable."
+      : undefined;
     const audioAssetUrl = `/api/audio?text=${encodeURIComponent(narrationText)}`;
     let readyAudio = {
       id: audioId,
@@ -826,13 +1115,15 @@ export async function* generateLessonStream(input: {
           },
         };
         audioUsedFallback = false;
-      } catch {
+        audioProblem = undefined;
+      } catch (error) {
         readyAudio = {
           ...readyAudio,
           status: "failed",
           asset: undefined,
         };
         audioUsedFallback = true;
+        audioProblem = `SLNG narration generation failed: ${errorMessage(error)}`;
       }
     }
     const audioPatch: LessonPatchOp = { op: "replace_node", node: readyAudio };
@@ -843,7 +1134,8 @@ export async function* generateLessonStream(input: {
       s7,
       "slng",
       readyAudio.asset?.url ?? "Audio unavailable",
-      audioUsedFallback
+      audioUsedFallback,
+      audioProblem
     );
 
     const s8 = step();
@@ -852,6 +1144,7 @@ export async function* generateLessonStream(input: {
     let themeCss: string | undefined;
     let runtimeScriptDetail = "Solar system uses bundled runtime";
     let runtimeScriptUsedFallback = false;
+    let runtimeScriptProblem: string | undefined;
     if (!input.transcript.toLowerCase().includes("solar system")) {
       if (input.readiness.llm) {
         try {
@@ -867,7 +1160,8 @@ export async function* generateLessonStream(input: {
             ? `Generated theme/runtime via OpenAI ${generatedRuntime.model} with fallback: CSS ${generatedRuntime.cssUsedFallback ? "fallback" : "generated"}, JS ${generatedRuntime.codeUsedFallback ? "fallback" : "generated"}`
             : `Generated topic theme and sandbox JS via OpenAI ${generatedRuntime.model}`;
           runtimeScriptUsedFallback = generatedRuntime.usedFallback;
-        } catch {
+          runtimeScriptProblem = generatedRuntime.problem;
+        } catch (error) {
           themeCss = fallbackLessonThemeCss({
             prompt: input.transcript,
             plan: lessonPlan,
@@ -875,6 +1169,7 @@ export async function* generateLessonStream(input: {
           runtimeScript = fallbackLessonRuntimeScript();
           runtimeScriptDetail = "Fallback theme and inline JS";
           runtimeScriptUsedFallback = true;
+          runtimeScriptProblem = `OpenAI sandbox runtime generation failed: ${errorMessage(error)}`;
         }
       } else {
         themeCss = fallbackLessonThemeCss({
@@ -884,13 +1179,16 @@ export async function* generateLessonStream(input: {
         runtimeScript = fallbackLessonRuntimeScript();
         runtimeScriptDetail = "Fallback theme and inline JS";
         runtimeScriptUsedFallback = true;
+        runtimeScriptProblem =
+          "OPENAI_API_KEY is missing; using deterministic sandbox theme and inline JavaScript.";
       }
     }
     yield providerCompleted(
       s8,
       "llm",
       runtimeScriptDetail,
-      runtimeScriptUsedFallback
+      runtimeScriptUsedFallback,
+      runtimeScriptProblem
     );
 
     const s9 = step();
@@ -955,7 +1253,7 @@ export async function* generateLessonStream(input: {
       },
       schemaData: {
         provider: schemaDataProvider,
-        entities,
+        entities: sandboxPresentationEntities,
       },
     });
     yield providerCompleted(
@@ -976,7 +1274,7 @@ export async function* generateLessonStream(input: {
           detail: "Solar system uses the source-controlled demo runtime.",
           checks: [],
           model: input.env.OPENAI_CODE_MODEL ?? "CODE_MODEL",
-          usedFallback: true,
+          usedFallback: false,
         }
       : await reviewSandboxedLessonWithCodeModel({
           artifact,
@@ -984,11 +1282,17 @@ export async function* generateLessonStream(input: {
           plan: lessonPlan,
           env: input.env,
         });
+    const demoReviewProblem = demoReview.usedFallback
+      ? (demoReview.problem ?? demoReview.detail)
+      : demoReview.passed
+        ? undefined
+        : demoReview.detail;
     yield providerCompleted(
       s10,
       "llm",
       demoReview.detail,
-      demoReview.usedFallback || !demoReview.passed
+      demoReview.usedFallback,
+      demoReviewProblem
     );
 
     const s11 = step();

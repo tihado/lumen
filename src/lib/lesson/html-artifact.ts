@@ -6,6 +6,32 @@ const MAX_THEME_CSS_LENGTH = 30_000;
 const SOLAR_RUNTIME_SRC = "/lesson-runtime/solar-system.v1.js";
 const EMBEDDED_RUNTIME_SCRIPT_ID = "lesson-runtime-script";
 const THEME_STYLE_ID = "lesson-theme-style";
+const MAX_ENTITY_NESTING_LEVEL = 5;
+
+type StaticLessonEntity = {
+  label: string;
+  kind: string;
+  span?: string;
+  summary?: string;
+  children?: StaticLessonEntity[];
+};
+
+function createStaticLessonEntitySchema(
+  level = 1
+): z.ZodType<StaticLessonEntity> {
+  return z.object({
+    label: z.string(),
+    kind: z.string(),
+    span: z.string().optional(),
+    summary: z.string().optional(),
+    children:
+      level >= MAX_ENTITY_NESTING_LEVEL
+        ? z.array(z.never()).max(0).optional()
+        : z.array(createStaticLessonEntitySchema(level + 1)).optional(),
+  });
+}
+
+const staticLessonEntitySchema = createStaticLessonEntitySchema();
 
 const planetSchema = z.object({
   id: z.string(),
@@ -53,13 +79,7 @@ export const sandboxedLessonSpecSchema = z.object({
   schemaData: z
     .object({
       provider: z.enum(["pioneer-gliner2", "heuristic"]),
-      entities: z.array(
-        z.object({
-          label: z.string(),
-          kind: z.string(),
-          span: z.string().optional(),
-        })
-      ),
+      entities: z.array(staticLessonEntitySchema),
     })
     .optional(),
   studio: z.unknown().optional(),
@@ -106,12 +126,39 @@ type StaticLessonMedia = {
 
 type StaticLessonSchemaData = {
   provider: "pioneer-gliner2" | "heuristic";
-  entities: {
-    label: string;
-    kind: string;
-    span?: string;
-  }[];
+  entities: StaticLessonEntity[];
 };
+
+function limitStaticLessonEntities(
+  entities: StaticLessonEntity[],
+  level = 1
+): StaticLessonEntity[] {
+  return entities.map((entity) => {
+    const children =
+      level < MAX_ENTITY_NESTING_LEVEL && entity.children
+        ? limitStaticLessonEntities(entity.children, level + 1)
+        : [];
+    return {
+      label: entity.label,
+      kind: entity.kind,
+      ...(entity.span ? { span: entity.span } : {}),
+      ...(entity.summary ? { summary: entity.summary } : {}),
+      ...(children.length > 0 ? { children } : {}),
+    };
+  });
+}
+
+function limitStaticLessonSchemaData(
+  schemaData: StaticLessonSchemaData | undefined
+): StaticLessonSchemaData | undefined {
+  if (!schemaData) {
+    return;
+  }
+  return {
+    provider: schemaData.provider,
+    entities: limitStaticLessonEntities(schemaData.entities),
+  };
+}
 
 const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
   {
@@ -384,7 +431,7 @@ export function createSandboxedLessonArtifact(input: {
           choices: input.plan.quiz.items[0]?.choices ?? [],
           answer: input.plan.quiz.items[0]?.answer ?? "",
         },
-        schemaData: input.schemaData,
+        schemaData: limitStaticLessonSchemaData(input.schemaData),
       };
 
   const html =
@@ -523,6 +570,272 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
 </html>`;
 }
 
+function createStaticLessonTemplateRuntimeScript(runtimeScript?: string) {
+  const customRuntime = runtimeScript?.trim();
+  const templateRuntime = `
+const root = document.querySelector("[data-runtime='static-lesson']");
+if (root) {
+  root.querySelectorAll("[data-objective-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const pressed = button.getAttribute("aria-pressed") === "true";
+      button.setAttribute("aria-pressed", String(!pressed));
+      button.classList.toggle("is-complete", !pressed);
+    });
+  });
+
+  root.querySelectorAll("[data-quiz-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const scope = button.closest("article") ?? root;
+      const answer = scope.querySelector("[data-quiz-answer]");
+      const feedback = scope.querySelector("[data-quiz-feedback]");
+      const isCorrect = button.textContent?.trim() === answer?.textContent?.trim();
+      scope.querySelectorAll("[data-quiz-choice]").forEach((choice) => {
+        choice.classList.remove("is-correct", "is-wrong");
+      });
+      button.classList.add(isCorrect ? "is-correct" : "is-wrong");
+      if (feedback) {
+        feedback.textContent = isCorrect ? "Correct. Nice reasoning." : "Try again, then compare with the answer.";
+      }
+    });
+  });
+
+  root.querySelectorAll("[data-classify-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const card = button.closest("[data-classify-card]");
+      if (!card) return;
+      const picked = button.getAttribute("data-classify-choice")?.split(":").pop();
+      const answer = card.getAttribute("data-answer");
+      const result = card.querySelector("[data-classify-result]");
+      card.querySelectorAll("[data-classify-choice]").forEach((choice) => {
+        choice.classList.remove("selected", "correct", "wrong");
+      });
+      button.classList.add("selected", picked === answer ? "correct" : "wrong");
+      if (result) {
+        result.textContent = picked === answer ? "Correct. Explain why this card fits." : "Try the other category, then explain the difference.";
+      }
+    });
+  });
+
+  const dataElement = document.getElementById("lesson-data");
+  const entitySpace = root.querySelector("[data-entity-space]");
+  const entityMap = root.querySelector("[data-entity-map]");
+  const entityDetails = root.querySelector("[data-entity-details]");
+  const entityBreadcrumb = root.querySelector("[data-entity-breadcrumb]");
+  const entityTooltip = root.querySelector("[data-entity-tooltip]");
+
+  let lessonData = {};
+  try {
+    lessonData = JSON.parse(dataElement?.textContent || "{}");
+  } catch {
+    lessonData = {};
+  }
+
+  const asText = (value, fallback = "") => {
+    if (typeof value !== "string") return fallback;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  };
+  const shortText = (value, fallback = "") => {
+    const text = asText(value, fallback).replace(/\\s+/g, " ");
+    return text.length > 170 ? text.slice(0, 167).trimEnd() + "..." : text;
+  };
+  const schemaData = lessonData?.schemaData && typeof lessonData.schemaData === "object" ? lessonData.schemaData : {};
+  const student = lessonData?.student && typeof lessonData.student === "object" ? lessonData.student : {};
+  const schemaEntities = Array.isArray(schemaData.entities) ? schemaData.entities : [];
+  const vocabularyEntities = Array.isArray(student.keyVocabulary)
+    ? student.keyVocabulary.map((item) => ({
+        label: item?.term,
+        kind: "term",
+        summary: item?.definition,
+      }))
+    : [];
+  const entityInput = schemaEntities.length > 0 ? schemaEntities : vocabularyEntities;
+  const maxEntityNestingLevel = ${MAX_ENTITY_NESTING_LEVEL};
+
+  const normalizeEntity = (value, index, path, level = 1) => {
+    const record = value && typeof value === "object" ? value : { label: String(value ?? "") };
+    const label = asText(record.label ?? record.term ?? record.title, "Entity " + (index + 1));
+    const kind = asText(record.kind ?? record.type ?? record.category, "entity");
+    const rawChildren =
+      level < maxEntityNestingLevel && Array.isArray(record.children)
+        ? record.children
+        : [];
+    const children = rawChildren
+      .map((child, childIndex) => normalizeEntity(child, childIndex, path + "-" + index, level + 1))
+      .filter(Boolean);
+    const summary =
+      shortText(record.summary) ||
+      shortText(record.span) ||
+      shortText(record.definition) ||
+      shortText(record.body) ||
+      (children.length > 0
+        ? label + " contains " + children.length + " connected entities."
+        : label + " is tagged as " + kind + " in this lesson schema.");
+    return {
+      id: path + "-" + index,
+      label,
+      kind,
+      summary,
+      children,
+    };
+  };
+
+  const rootEntity = {
+    id: "entity-root",
+    label: asText(student.title ?? lessonData.title, "Lesson schema"),
+    kind: asText(schemaData.provider, "schema"),
+    summary: shortText(student.summary ?? lessonData.summary, "Extracted entities from the lesson schema."),
+    children: entityInput
+      .map((entity, index) => normalizeEntity(entity, index, "entity", 1))
+      .filter(Boolean),
+  };
+  const entityStack = [rootEntity];
+
+  const clear = (element) => {
+    while (element?.firstChild) {
+      element.removeChild(element.firstChild);
+    }
+  };
+  const appendText = (element, value) => {
+    element.appendChild(document.createTextNode(value));
+  };
+
+  const renderDetails = (entity) => {
+    if (!entityDetails) return;
+    clear(entityDetails);
+    const kicker = document.createElement("p");
+    kicker.className = "kicker";
+    appendText(kicker, entity.kind);
+    const title = document.createElement("h3");
+    appendText(title, entity.label);
+    const summary = document.createElement("p");
+    appendText(summary, entity.summary);
+    entityDetails.append(kicker, title, summary);
+  };
+
+  const showTooltip = (entity, anchor) => {
+    if (!entityTooltip || !entitySpace) return;
+    clear(entityTooltip);
+    const title = document.createElement("strong");
+    appendText(title, entity.label);
+    const summary = document.createElement("p");
+    appendText(summary, entity.summary);
+    entityTooltip.append(title, summary);
+    entityTooltip.classList.add("is-visible");
+    const stageRect = entitySpace.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    const center = anchorRect.left - stageRect.left + anchorRect.width / 2;
+    const left = Math.min(Math.max(center, 130), Math.max(130, stageRect.width - 130));
+    let top = anchorRect.top - stageRect.top - entityTooltip.offsetHeight - 12;
+    if (top < 10) {
+      top = anchorRect.bottom - stageRect.top + 12;
+    }
+    entityTooltip.style.left = left + "px";
+    entityTooltip.style.top = top + "px";
+  };
+
+  const hideTooltip = () => {
+    if (!entityTooltip) return;
+    entityTooltip.classList.remove("is-visible");
+  };
+
+  const renderBreadcrumb = () => {
+    if (!entityBreadcrumb) return;
+    clear(entityBreadcrumb);
+    entityStack.forEach((entity, index) => {
+      if (index < entityStack.length - 1) {
+        const button = document.createElement("button");
+        button.type = "button";
+        appendText(button, entity.label);
+        button.addEventListener("click", () => {
+          entityStack.splice(index + 1);
+          renderEntityView();
+        });
+        entityBreadcrumb.appendChild(button);
+        return;
+      }
+      const current = document.createElement("span");
+      appendText(current, entity.label);
+      entityBreadcrumb.appendChild(current);
+    });
+  };
+
+  const renderEntityButton = (entity) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "entity-node";
+    button.setAttribute("data-entity-node", entity.id);
+    const label = document.createElement("span");
+    label.className = "entity-node-label";
+    appendText(label, entity.label);
+    const meta = document.createElement("span");
+    meta.className = "entity-node-meta";
+    const kind = document.createElement("span");
+    kind.className = "entity-chip";
+    appendText(kind, entity.kind);
+    meta.appendChild(kind);
+    if (entity.children.length > 0) {
+      const count = document.createElement("span");
+      count.className = "entity-chip";
+      appendText(count, String(entity.children.length) + " linked");
+      meta.appendChild(count);
+    }
+    button.append(label, meta);
+    button.addEventListener("mouseenter", () => showTooltip(entity, button));
+    button.addEventListener("focus", () => showTooltip(entity, button));
+    button.addEventListener("mouseleave", hideTooltip);
+    button.addEventListener("blur", hideTooltip);
+    button.addEventListener("click", () => {
+      hideTooltip();
+      renderDetails(entity);
+      if (entity.children.length > 0) {
+        entityStack.push(entity);
+        renderEntityView();
+      }
+    });
+    return button;
+  };
+
+  function renderEntityView() {
+    if (!entityMap) return;
+    const current = entityStack[entityStack.length - 1];
+    clear(entityMap);
+    renderBreadcrumb();
+    renderDetails(current);
+    if (current.children.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "lesson-copy";
+      appendText(empty, "No child entities are available for this schema node yet.");
+      entityMap.appendChild(empty);
+      return;
+    }
+    current.children.forEach((entity) => {
+      entityMap.appendChild(renderEntityButton(entity));
+    });
+  }
+
+  if (entitySpace && entityMap && entityDetails && entityBreadcrumb) {
+    renderEntityView();
+    entitySpace.addEventListener("contextmenu", (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-entity-node]")) {
+        return;
+      }
+      if (entityStack.length > 1) {
+        event.preventDefault();
+        hideTooltip();
+        entityStack.pop();
+        renderEntityView();
+      }
+    });
+  }
+}
+`.trim();
+  return customRuntime
+    ? `${templateRuntime}\n\n${customRuntime}`
+    : templateRuntime;
+}
+
 function createStaticLessonHtml(
   plan: LessonPlan,
   spec: SandboxedLessonSpec,
@@ -636,6 +949,25 @@ function createStaticLessonHtml(
     .answer-line { display: none; }
     .reflection-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(260px, .7fr); gap: 18px; }
     .reflection-panel { border: 1px solid rgba(79, 99, 199, .18); background: linear-gradient(135deg, rgba(235, 238, 255, .9), rgba(255, 253, 246, .84)); }
+    .entity-band { padding-bottom: 52px; }
+    .entity-stage { position: relative; display: grid; gap: 16px; min-height: 460px; overflow: hidden; border: 1px solid rgba(23, 32, 51, .16); border-radius: 8px; background: linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(231, 238, 255, .82)); padding: 18px; box-shadow: 0 18px 50px rgba(23, 32, 51, .14); }
+    .entity-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(23, 32, 51, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 32, 51, .06) 1px, transparent 1px); background-size: 38px 38px; mask-image: linear-gradient(180deg, rgba(0, 0, 0, .74), transparent); }
+    .entity-breadcrumb { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 38px; }
+    .entity-breadcrumb button, .entity-breadcrumb span { min-height: 34px; border-radius: 999px; padding: 7px 11px; font-size: 12px; }
+    .entity-breadcrumb span { display: inline-flex; align-items: center; border: 1px solid rgba(23, 32, 51, .14); background: rgba(255, 253, 246, .74); font-weight: 760; }
+    .entity-map { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; align-content: start; min-height: 220px; }
+    .entity-node { display: grid; align-content: space-between; gap: 10px; min-height: 118px; text-align: left; border-width: 2px; background: linear-gradient(160deg, #ffffff, rgba(215, 238, 231, .76)); box-shadow: 0 12px 30px rgba(23, 32, 51, .12); }
+    .entity-node:hover, .entity-node:focus-visible { border-color: var(--iris); transform: translateY(-2px); }
+    .entity-node-label { color: var(--ink); font-size: 17px; font-weight: 860; line-height: 1.18; }
+    .entity-node-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; font-weight: 760; }
+    .entity-chip { border: 1px solid rgba(79, 99, 199, .18); border-radius: 999px; background: rgba(255, 253, 246, .78); padding: 4px 8px; }
+    .entity-details { position: relative; z-index: 1; display: grid; gap: 8px; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: rgba(255, 253, 246, .78); padding: 16px; }
+    .entity-details h3 { margin: 0; font-size: 24px; line-height: 1.1; }
+    .entity-details p { margin: 0; color: #2d3b4f; }
+    .entity-tooltip { position: absolute; z-index: 4; width: min(300px, calc(100% - 32px)); pointer-events: none; opacity: 0; transform: translate(-50%, 4px); border: 1px solid rgba(23, 32, 51, .18); border-radius: 8px; background: rgba(23, 29, 43, .94); color: #f8fafc; padding: 12px; box-shadow: 0 18px 48px rgba(23, 32, 51, .28); transition: opacity .14s ease, transform .14s ease; }
+    .entity-tooltip.is-visible { opacity: 1; transform: translate(-50%, -2px); }
+    .entity-tooltip strong { display: block; margin-bottom: 4px; font-size: 14px; }
+    .entity-tooltip p { margin: 0; color: #dce6f5; font-size: 12px; line-height: 1.45; }
     .next-challenge { background: var(--night); color: #f8fafc; }
     .next-challenge ul { margin-bottom: 0; }
     .next-challenge li { color: #dce6f5; }
@@ -644,11 +976,14 @@ function createStaticLessonHtml(
       .lesson-hero { min-height: 0; padding: 40px 18px 30px; }
       .hero-copy h1 { font-size: 44px; }
       .stage { padding-left: 16px; padding-right: 16px; }
+      .entity-map { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
     }
     @media (max-width: 560px) {
       .hero-copy h1 { font-size: 34px; }
       .hero-summary { font-size: 16px; }
       .explain-step, .explore-beat { grid-template-columns: 1fr; }
+      .entity-stage { min-height: 520px; padding: 14px; }
+      .entity-map { grid-template-columns: 1fr; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
@@ -743,6 +1078,21 @@ function createStaticLessonHtml(
           </div>
         </div>
       </section>
+      <section class="lesson-band entity-band" data-entity-presenter>
+        <div class="band-heading">
+          <div>
+            <p class="kicker">Pioneer / GLiNER2 schema</p>
+            <h2>Entity presentation map</h2>
+          </div>
+          <p>A nested view of the concepts, terms, processes, objects, and relationships extracted for this lesson.</p>
+        </div>
+        <div class="entity-stage" data-entity-space tabindex="0" aria-label="Nested Pioneer and GLiNER2 entity presentation">
+          <div class="entity-breadcrumb" data-entity-breadcrumb></div>
+          <div class="entity-map" data-entity-map></div>
+          <div class="entity-details" data-entity-details></div>
+          <div class="entity-tooltip" data-entity-tooltip role="status"></div>
+        </div>
+      </section>
       <section class="lesson-band">
         <div class="example-panel">
           <div>
@@ -828,7 +1178,7 @@ function createStaticLessonHtml(
     </div>
   </main>
   <script type="application/json" id="lesson-data">${jsonForHtml(runtimeData)}</script>
-  <script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(runtimeScript ?? "")}</script>
+  <script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(createStaticLessonTemplateRuntimeScript(runtimeScript))}</script>
 </body>
 </html>`;
 }

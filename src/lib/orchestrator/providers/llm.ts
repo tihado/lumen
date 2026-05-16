@@ -8,10 +8,20 @@ import {
   type SandboxedLessonArtifact,
   validateSandboxedLessonThemeCss,
 } from "@/lib/lesson/html-artifact";
+import { applyLessonPatches, type LessonPatchOp } from "@/lib/lesson/patches";
+import {
+  type LessonDocument,
+  lessonDocumentSchema,
+  lessonNodeSchema,
+} from "@/lib/lesson/schema";
 import type { ExtractedEntity } from "./pioneer";
 
 const DEFAULT_LESSON_MODEL = "gpt-5";
 const DEFAULT_CODE_MODEL = "gpt-5.2-codex";
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 const lessonScriptSchema = z.object({
   segment: z
@@ -187,6 +197,30 @@ const sandboxDemoReviewSchema = z.object({
   strengths: z.array(z.string().min(1).max(180)).max(5),
   concerns: z.array(z.string().min(1).max(180)).max(5),
 });
+
+const canvasRevisionSchema = z.object({
+  reply: z.string().min(1).max(360),
+  meta: z
+    .object({
+      title: z.string().min(1).max(120).optional(),
+      gradeBand: z.string().min(1).max(80).optional(),
+      durationMinutes: z.number().int().min(5).max(120).optional(),
+    })
+    .optional(),
+  replacements: z
+    .array(lessonNodeSchema)
+    .min(1)
+    .max(8)
+    .describe("Complete replacement nodes. Preserve existing IDs."),
+});
+
+export type CanvasRevisionResult = {
+  lesson: LessonDocument;
+  reply: string;
+  patches: LessonPatchOp[];
+  model: string;
+  usedFallback: boolean;
+};
 
 export function fallbackLessonPlan(input: {
   topic: string;
@@ -395,7 +429,7 @@ export async function generateLessonPlan(input: {
         "A complete classroom lesson plan for an editable multimedia lesson renderer.",
     }),
     system:
-      "You are a senior curriculum designer creating complete, classroom-ready lessons for an editable multimedia lesson canvas. Match the depth of a polished demo lesson: a vivid hook, explicit objectives, key vocabulary, sequenced explanation, worked example, misconception check, hands-on practice, multi-question quiz, reflection, and teacher facilitation tips. Use markdown only in body fields. Be accurate, age-appropriate, concrete, and grounded in the supplied transcript, extracted entities, and research excerpts. Prefer teachable details over generic encouragement.",
+      "You are a senior curriculum designer for Lumen, a voice-first AI lesson authoring app that turns a teacher's rough intent into a schema-backed, editable multimedia lesson canvas instead of a wall of text. Create classroom-ready lessons with a vivid hook, explicit objectives, key vocabulary, sequenced explanation, worked example, misconception check, hands-on practice, multi-question quiz, reflection, and teacher facilitation tips. Use markdown only in body fields. Be accurate, age-appropriate, concrete, and grounded in the supplied transcript, Pioneer/GLiNER2 entities, and Tavily research excerpts. Prefer teachable details over generic encouragement.",
     prompt: [
       `Teacher transcript:\n${input.transcript}`,
       `Topic: ${input.topic}`,
@@ -406,6 +440,7 @@ export async function generateLessonPlan(input: {
         "Make the lesson usable by a teacher without further prompting.",
         "First plan the lecture script: what the teacher says, what students do, and where media appears.",
         "Explanation sections should form a coherent mini-lecture, not separate trivia cards.",
+        "Use extracted entities to choose vocabulary, misconception checks, activity items, quiz distractors, and media focus.",
         "The media plan must be a storyboard for fal generation. Each asset must map to a lesson part and teach something specific: image as diagram/anchor/practice visual, video as process/sequence/motion.",
         "Use assets that can be generated independently so the orchestrator can run media jobs in parallel.",
         "Each quiz answer must exactly match one of that item's choices.",
@@ -561,6 +596,115 @@ function studentPresentationData(plan: LessonPlan) {
   };
 }
 
+function summarizeLessonForRevision(lesson: LessonDocument) {
+  return {
+    id: lesson.id,
+    title: lesson.title,
+    gradeBand: lesson.gradeBand,
+    durationMinutes: lesson.durationMinutes,
+    root: lesson.root,
+    nodes: Object.values(lesson.nodes).map((node) => {
+      if (node.type === "section") {
+        return {
+          id: node.id,
+          type: node.type,
+          title: node.title,
+          children: node.children,
+        };
+      }
+      return node;
+    }),
+  };
+}
+
+function fallbackCanvasRevision(input: {
+  lesson: LessonDocument;
+  instruction: string;
+}): CanvasRevisionResult {
+  const firstText = Object.values(input.lesson.nodes).find(
+    (
+      node
+    ): node is Extract<LessonDocument["nodes"][string], { type: "text" }> =>
+      node.type === "text"
+  );
+  if (!firstText) {
+    return {
+      lesson: input.lesson,
+      reply: "I could not find a text block to revise yet.",
+      patches: [],
+      model: "deterministic-fallback",
+      usedFallback: true,
+    };
+  }
+  const node = {
+    ...firstText,
+    body: `${firstText.body}\n\n**Revision note:** ${input.instruction}`,
+  };
+  const patches: LessonPatchOp[] = [{ op: "replace_node", node }];
+  return {
+    lesson: applyLessonPatches(input.lesson, patches),
+    reply: "I added your revision request as a note in the first text block.",
+    patches,
+    model: "deterministic-fallback",
+    usedFallback: true,
+  };
+}
+
+export async function reviseCanvasLesson(input: {
+  lesson: LessonDocument;
+  instruction: string;
+  env: AppEnv;
+}): Promise<CanvasRevisionResult> {
+  const lesson = lessonDocumentSchema.parse(input.lesson);
+  const model = input.env.OPENAI_MODEL ?? DEFAULT_LESSON_MODEL;
+  if (!input.env.OPENAI_API_KEY) {
+    return fallbackCanvasRevision({ lesson, instruction: input.instruction });
+  }
+  const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
+  try {
+    const { output } = await generateText({
+      model: openai(model),
+      output: Output.object({
+        schema: canvasRevisionSchema,
+        name: "canvas_lesson_revision",
+        description:
+          "Safe edits to an existing teacher-facing lesson canvas document.",
+      }),
+      system:
+        "You revise an existing teacher-facing Lumen lesson canvas. Return schema-valid JSON only. Preserve node IDs so the canvas can patch blocks in place. Prefer replacing existing text, objective, quiz, activity, and reflection nodes. Do not delete media or sections.",
+      prompt: [
+        "Apply the user's latest typed or voice-style command to the lesson teaching plan shown in the canvas.",
+        "Keep the lesson coherent, classroom-ready, schema-backed, and editable. Make concrete block edits, not just generic acknowledgements or a new wall of text.",
+        "Return complete replacement nodes for only the blocks that should change. Every replacement id must already exist in the lesson.",
+        "Do not invent citations or external URLs. Keep media nodes unchanged unless the user specifically asks to alter alt text.",
+        `User message:\n${input.instruction}`,
+        `Current lesson summary:\n${JSON.stringify(summarizeLessonForRevision(lesson))}`,
+      ].join("\n\n---\n\n"),
+    });
+    const patches: LessonPatchOp[] = [];
+    if (output.meta) {
+      patches.push({ op: "set_meta", ...output.meta });
+    }
+    for (const node of output.replacements) {
+      if (lesson.nodes[node.id]) {
+        patches.push({ op: "replace_node", node });
+      }
+    }
+    if (patches.length === 0) {
+      return fallbackCanvasRevision({ lesson, instruction: input.instruction });
+    }
+    return {
+      lesson: applyLessonPatches(lesson, patches),
+      reply: output.reply,
+      patches,
+      model,
+      usedFallback: false,
+    };
+  } catch {
+    return fallbackCanvasRevision({ lesson, instruction: input.instruction });
+  }
+}
+
 function topicPalette(input: Pick<LessonRuntimeInput, "prompt" | "plan">) {
   const text = `${input.prompt} ${input.plan.title}`.toLowerCase();
   if (/(ocean|water|river|weather|cycle|marine|rain|cloud)/.test(text)) {
@@ -697,16 +841,21 @@ export function fallbackLessonThemeCss(
 
 export async function generateLessonRuntimeThemeCss(
   input: LessonRuntimeInput
-): Promise<{ css: string; model: string; usedFallback: boolean }> {
+): Promise<{
+  css: string;
+  model: string;
+  usedFallback: boolean;
+  problem?: string;
+}> {
   const fallbackCss = fallbackLessonThemeCss(input);
   const result = await generateOpenAICode({
     env: input.env,
     system:
-      "You write safe, expressive CSS for a sandboxed children-facing lesson page. Return only CSS, with no Markdown fences and no explanations.",
+      "You write safe, expressive CSS for Lumen's sandboxed student-facing lesson page. Return only CSS, with no Markdown fences and no explanations.",
     prompt: [
       "Create topic-specific CSS for an embedded sandboxed HTML lesson page.",
       "The CSS will be placed after the base styles, so it should override and enrich the existing shell rather than replace it.",
-      "Make the page colorful, playful, readable, and suitable for a live student-facing teaching demo with children. Avoid a generic white-card dashboard look.",
+      "Make the page colorful, playful, readable, and suitable for a live student-facing teaching demo. Avoid a generic white-card dashboard look.",
       "The sandbox is the student presentation, not the teacher guide. Do not style or introduce teacher-facing sections such as teacher notes, teacher narration, facilitation moves, or lesson-planning cards.",
       "Make interactive areas large and obvious: [data-quiz-choice], [data-classify-choice], [data-objective-toggle], .quiz-card, and .activity-card need generous min-height, padding, and clear hover/focus states.",
       "Use the lesson topic to choose a visual language: colors, gradients, section accents, soft patterns, and motion should feel specialized to the subject.",
@@ -720,8 +869,13 @@ export async function generateLessonRuntimeThemeCss(
   const css = stripCodeFence(result.text);
   try {
     validateSandboxedLessonThemeCss(css);
-  } catch {
-    return { css: fallbackCss, model: result.model, usedFallback: true };
+  } catch (error) {
+    return {
+      css: fallbackCss,
+      model: result.model,
+      usedFallback: true,
+      problem: `Generated sandbox CSS failed validation: ${errorMessage(error)}`,
+    };
   }
   return { css, model: result.model, usedFallback: false };
 }
@@ -731,9 +885,16 @@ export async function generateLessonRuntimeScript(input: {
   plan: LessonPlan;
   entities?: ExtractedEntity[];
   env: AppEnv;
-}): Promise<{ code: string; model: string; usedFallback: boolean }> {
+}): Promise<{
+  code: string;
+  model: string;
+  usedFallback: boolean;
+  problem?: string;
+}> {
   const result = await generateOpenAICode({
     env: input.env,
+    system:
+      "You write safe, student-facing vanilla JavaScript enhancements for Lumen sandboxed lesson pages. Return only JavaScript code, with no Markdown fences and no explanations.",
     prompt: [
       "Create vanilla browser JavaScript for an embedded sandboxed lesson page.",
       "Target the quality bar of the bundled solar system demo in this repository: polished visual hierarchy, topic-specific interaction, responsive layout, meaningful motion, clear feedback, and classroom-safe copy.",
@@ -756,6 +917,10 @@ export async function generateLessonRuntimeScript(input: {
       code: fallbackLessonRuntimeScript(),
       model: result.model,
       usedFallback: true,
+      problem:
+        code.length > 40_000
+          ? "Generated sandbox JavaScript exceeded the size limit."
+          : "Generated sandbox JavaScript failed safety validation.",
     };
   }
   return { code, model: result.model, usedFallback: false };
@@ -770,6 +935,7 @@ export async function generateLessonRuntimeEnhancement(
   usedFallback: boolean;
   cssUsedFallback: boolean;
   codeUsedFallback: boolean;
+  problem?: string;
 }> {
   const [themeResult, scriptResult] = await Promise.allSettled([
     generateLessonRuntimeThemeCss(input),
@@ -782,6 +948,7 @@ export async function generateLessonRuntimeEnhancement(
           css: fallbackLessonThemeCss(input),
           model: input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL,
           usedFallback: true,
+          problem: `Sandbox CSS generation failed: ${errorMessage(themeResult.reason)}`,
         };
   const script =
     scriptResult.status === "fulfilled"
@@ -790,6 +957,7 @@ export async function generateLessonRuntimeEnhancement(
           code: fallbackLessonRuntimeScript(),
           model: input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL,
           usedFallback: true,
+          problem: `Sandbox JavaScript generation failed: ${errorMessage(scriptResult.reason)}`,
         };
   const model =
     theme.model === script.model
@@ -802,6 +970,8 @@ export async function generateLessonRuntimeEnhancement(
     usedFallback: theme.usedFallback || script.usedFallback,
     cssUsedFallback: theme.usedFallback,
     codeUsedFallback: script.usedFallback,
+    problem:
+      [theme.problem, script.problem].filter(Boolean).join(" ") || undefined,
   };
 }
 
@@ -810,9 +980,21 @@ export async function reviewSandboxedLessonWithCodeModel(input: {
   prompt: string;
   plan: LessonPlan;
   env: AppEnv;
-}): Promise<SandboxDemoReview & { model: string; usedFallback: boolean }> {
+}): Promise<
+  SandboxDemoReview & { model: string; usedFallback: boolean; problem?: string }
+> {
   const baseline = reviewSandboxedLessonArtifact(input.artifact);
   const model = input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL;
+  if (!input.env.OPENAI_API_KEY) {
+    return {
+      ...baseline,
+      model,
+      usedFallback: true,
+      problem:
+        "OPENAI_API_KEY is missing, so the CODE_MODEL review used deterministic checks only.",
+      detail: `CODE_MODEL ${model} review unavailable; deterministic fallback used. ${baseline.detail}`,
+    };
+  }
   const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
   try {
     const { output } = await generateText({
@@ -821,12 +1003,13 @@ export async function reviewSandboxedLessonWithCodeModel(input: {
         schema: sandboxDemoReviewSchema,
         name: "sandbox_demo_review",
         description:
-          "A compact CODE_MODEL review of a generated children-facing sandbox lesson page.",
+          "A compact CODE_MODEL review of a generated student-facing sandbox lesson page.",
       }),
       system:
-        "You are a rigorous demo reviewer for children-facing educational sandbox HTML. Return schema-valid JSON only.",
+        "You are a rigorous demo reviewer for Lumen's student-facing educational sandbox HTML. Return schema-valid JSON only.",
       prompt: [
-        "Review whether this sandbox page is playful, colorful, readable, and suitable for a live teaching demonstration for children.",
+        "Review whether this sandbox page supports Lumen's product promise: a teacher gets an editable multimedia lesson canvas and students get a polished interactive presentation, not a wall of text.",
+        "Check whether this sandbox page is playful, colorful, readable, and suitable for a live student-facing teaching demonstration.",
         "Focus on topic-specific visual theme, large interactive areas, clear feedback, and whether the page feels more like an engaging lesson than a generic dashboard.",
         "The sandbox is meant for students. Penalize visible teacher-facing guide content such as teacher notes, teacher narration, facilitation moves, or canvas planning cards.",
         "Do not require external assets or browser execution. Judge from the HTML, embedded CSS, data hooks, and script structure.",
@@ -860,6 +1043,7 @@ export async function reviewSandboxedLessonWithCodeModel(input: {
       ...baseline,
       model,
       usedFallback: true,
+      problem: `CODE_MODEL ${model} review failed, so deterministic checks were used.`,
       detail: `CODE_MODEL ${model} review unavailable; deterministic fallback used. ${baseline.detail}`,
     };
   }
