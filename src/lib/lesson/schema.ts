@@ -15,7 +15,7 @@ export const citationSchema = z.object({
 export type Citation = z.infer<typeof citationSchema>;
 
 export const mediaProvenanceSchema = z.object({
-  provider: z.literal("fal"),
+  provider: z.enum(["fal", "slng"]),
   model: z.string().optional(),
   jobId: z.string().optional(),
   prompt: z.string().optional(),
@@ -39,7 +39,7 @@ export const mediaBlockSchema = z.object({
   id: nodeIdSchema,
   type: z.literal("media"),
   title: z.string().optional(),
-  modality: z.enum(["image", "video"]),
+  modality: z.enum(["image", "video", "audio"]),
   alt: z.string(),
   status: z.enum(["pending", "ready", "failed"]),
   asset: z

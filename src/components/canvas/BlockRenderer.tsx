@@ -157,7 +157,7 @@ export function BlockRenderer({
               Generating asset…
             </div>
           ) : null}
-          {node.asset?.url ? (
+          {node.asset?.url && node.modality === "image" ? (
             <Image
               alt={node.alt}
               className="max-h-64 w-full rounded-lg object-cover"
@@ -166,6 +166,27 @@ export function BlockRenderer({
               unoptimized
               width={node.asset.width ?? 800}
             />
+          ) : null}
+          {node.asset?.url && node.modality === "video" ? (
+            <video
+              className="max-h-72 w-full rounded-lg bg-black object-cover"
+              controls
+              playsInline
+              preload="metadata"
+              src={node.asset.url}
+            >
+              <track kind="captions" />
+            </video>
+          ) : null}
+          {node.asset?.url && node.modality === "audio" ? (
+            <audio
+              className="w-full"
+              controls
+              preload="none"
+              src={node.asset.url}
+            >
+              <track kind="captions" />
+            </audio>
           ) : null}
           {selected ? (
             <div className="space-y-2">
@@ -199,7 +220,8 @@ export function BlockRenderer({
                   ) : (
                     <RefreshCw className="size-4" />
                   )}
-                  Retry cover (fal)
+                  Retry {node.modality === "video" ? "video" : "cover"}{" "}
+                  {node.modality === "audio" ? "(SLNG)" : "(fal)"}
                 </Button>
               ) : null}
             </div>

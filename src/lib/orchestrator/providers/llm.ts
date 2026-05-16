@@ -33,6 +33,14 @@ const lessonPlanSchema = z.object({
 
 export type LessonPlan = z.infer<typeof lessonPlanSchema>;
 
+const openAIUtilityJsonSchema = z.object({
+  title: z.string().min(1).max(120),
+  summary: z.string().min(1).max(600),
+  steps: z.array(z.string().min(1).max(220)).min(1).max(8),
+});
+
+export type OpenAIUtilityJson = z.infer<typeof openAIUtilityJsonSchema>;
+
 export function fallbackLessonPlan(input: {
   topic: string;
   entities: ExtractedEntity[];
@@ -117,4 +125,53 @@ export async function generateLessonPlan(input: {
   });
 
   return { plan: output, model };
+}
+
+export async function generateOpenAIText(input: {
+  prompt: string;
+  env: AppEnv;
+  system?: string;
+}): Promise<{ text: string; model: string }> {
+  const model = input.env.OPENAI_MODEL ?? DEFAULT_LESSON_MODEL;
+  const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
+  const { text } = await generateText({
+    model: openai(model),
+    system:
+      input.system ??
+      "You write concise, useful educational product content for teachers.",
+    prompt: input.prompt,
+  });
+  return { text, model };
+}
+
+export async function generateOpenAICode(input: {
+  prompt: string;
+  env: AppEnv;
+}): Promise<{ text: string; model: string }> {
+  return generateOpenAIText({
+    env: input.env,
+    prompt: input.prompt,
+    system:
+      "You write production-minded code. Return only the requested code and essential inline comments.",
+  });
+}
+
+export async function generateOpenAIJson(input: {
+  prompt: string;
+  env: AppEnv;
+}): Promise<{ output: OpenAIUtilityJson; model: string }> {
+  const model = input.env.OPENAI_MODEL ?? DEFAULT_LESSON_MODEL;
+  const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
+  const { output } = await generateText({
+    model: openai(model),
+    output: Output.object({
+      schema: openAIUtilityJsonSchema,
+      name: "teacher_utility_json",
+      description: "A compact structured response for the teacher workflow.",
+    }),
+    system:
+      "Return schema-valid JSON only. Keep fields concise and useful for a teacher authoring workflow.",
+    prompt: input.prompt,
+  });
+  return { output, model };
 }

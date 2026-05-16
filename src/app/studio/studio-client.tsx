@@ -182,11 +182,43 @@ export function StudioClient() {
       }
       setMediaRetryingId(mediaId);
       try {
-        const prompt = `Educational illustration for: ${lesson.title}. Clean, classroom-safe, no text in image.`;
+        if (node.modality === "audio") {
+          const textNode = Object.values(lesson.nodes).find(
+            (n) => n.type === "text" && n.body.length > 0
+          );
+          const narration =
+            textNode?.type === "text"
+              ? textNode.body.slice(0, 900)
+              : `Brief teacher narration for ${lesson.title}.`;
+          const nextNode = {
+            ...node,
+            status: "ready" as const,
+            asset: {
+              url: `/api/audio?text=${encodeURIComponent(narration)}`,
+              mime: "audio/wav",
+            },
+            provenance: {
+              provider: "slng" as const,
+              createdAt: new Date().toISOString(),
+              prompt: narration,
+            },
+          };
+          setLesson((prev) =>
+            prev
+              ? applyLessonPatch(prev, { op: "replace_node", node: nextNode })
+              : prev
+          );
+          return;
+        }
+
+        const prompt =
+          node.modality === "video"
+            ? `Short educational video for: ${lesson.title}. Classroom-safe, no on-screen text, show motion that helps students understand.`
+            : `Educational illustration for: ${lesson.title}. Clean, classroom-safe, no text in image.`;
         const res = await fetch("/api/media", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ prompt, modality: node.modality }),
         });
         const data = (await res.json()) as {
           asset: { url: string; mime: string; width?: number; height?: number };
@@ -203,7 +235,7 @@ export function StudioClient() {
           },
           provenance: {
             provider: "fal" as const,
-            model: data.usedFallback ? "fallback" : "fal",
+            model: data.usedFallback ? "fallback" : `fal-${node.modality}`,
             createdAt: new Date().toISOString(),
             prompt,
           },

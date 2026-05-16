@@ -26,11 +26,35 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 | Variable                             | Enables                                                                                                                                                                        |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_API_KEY`                     | Live LLM lesson composition through AI SDK's direct OpenAI provider (otherwise deterministic lesson fallback).                                                                  |
-| `OPENAI_MODEL`                       | Optional OpenAI model override for lesson composition (default `gpt-5`).                                                                                                       |
+| `OPENAI_MODEL`                       | Optional OpenAI model override for lesson composition and `/api/openai` text / JSON / code generation (default `gpt-5`).                                                       |
 | `TAVILY_API_KEY`                     | Live Tavily search (otherwise demo fallback excerpts).                                                                                                                         |
-| `FAL_KEY`                            | Live fal image for cover art (`FAL_IMAGE_MODEL` optional, default `fal-ai/flux/schnell`).                                                                                      |
+| `FAL_KEY`                            | Live fal image and video generation.                                                                                                                                           |
+| `FAL_IMAGE_MODEL`                    | Optional fal image model override (default `fal-ai/flux/schnell`).                                                                                                             |
+| `FAL_VIDEO_MODEL`                    | Optional fal video model override (default `fal-ai/veo3.1/fast`).                                                                                                              |
 | `PIONEER_API_URL`                    | POST `{ text }` → `{ entities: [...] }` at `{base}/extract` (optional `PIONEER_API_KEY` bearer). Without URL, heuristic extraction runs and is labeled **fallback** in the UI. |
-| `SLNG_API_KEY` + `SLNG_API_BASE_URL` | Documented for future client voice wiring; studio still uses typed transcript + optional Web Speech API.                                                                       |
+| `SLNG_API_KEY` + `SLNG_API_BASE_URL` | Live SLNG audio endpoints for text-to-speech and speech-to-text; studio still keeps typed/browser speech fallback.                                                             |
+| `SLNG_TTS_MODEL`                     | Optional SLNG TTS model path (default `slng/deepgram/aura:2`).                                                                                                                 |
+| `SLNG_STT_MODEL`                     | Optional SLNG STT model path (default `slng/deepgram/nova:3`).                                                                                                                 |
+| `S3_BUCKET` + `AWS_REGION`           | Optional S3 bucket for storing generated fal/SLNG media.                                                                                                                       |
+| `AWS_ACCESS_KEY_ID`                  | S3 access key.                                                                                                                                                                |
+| `AWS_SECRET_ACCESS_KEY`              | S3 secret key.                                                                                                                                                                |
+| `AWS_SESSION_TOKEN`                  | Optional temporary credential token.                                                                                                                                          |
+| `S3_ENDPOINT_URL`                    | Optional S3-compatible endpoint for R2, MinIO, etc.                                                                                                                           |
+| `S3_PUBLIC_BASE_URL`                 | Optional public CDN/base URL for uploaded media.                                                                                                                              |
+| `S3_PREFIX`                          | Optional object key prefix (default `lesson-media`).                                                                                                                          |
+| `S3_FORCE_PATH_STYLE`                | Set to `true` for path-style S3-compatible endpoints.                                                                                                                         |
+
+### Provider endpoints
+
+- `POST /api/generate` — orchestrates Tavily search, Pioneer extraction, OpenAI structured lesson JSON, fal image/video media, SLNG narration metadata, then persists the lesson.
+- `POST /api/media` — generate `{ modality: "image" | "video", prompt }` through fal, with demo fallback assets.
+- `GET|POST /api/audio` — synthesize narration audio through SLNG TTS.
+- `POST /api/voice/transcribe` — transcribe uploaded audio through SLNG STT.
+- `POST /api/openai` — generate `{ mode: "text" | "json" | "code", prompt }` through OpenAI.
+
+When S3 env vars are configured, generated fal image/video assets and SLNG
+narration audio are mirrored to S3. Lesson media URLs point at the S3/CDN URL
+instead of provider-hosted temporary URLs.
 
 Run tests: `pnpm test`. Format: `pnpm run format`.
 

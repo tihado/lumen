@@ -4,6 +4,10 @@ import type { LessonPatchOp } from "@/lib/lesson/patches";
 import { applyLessonPatch } from "@/lib/lesson/patches";
 import type { Citation } from "@/lib/lesson/schema";
 import { createEmptyLesson } from "@/lib/lesson/schema";
+import {
+  mirrorRemoteAssetToS3,
+  uploadGeneratedBytesToS3,
+} from "@/lib/media/s3-storage";
 import { isSafeHttpsUrl } from "@/lib/url";
 import { createSandboxedLessonArtifact } from "../lesson/html-artifact";
 import {
@@ -13,14 +17,23 @@ import {
   markLessonFailed,
   saveLessonVersion,
 } from "../lesson/repository";
-import { falGenerateImage, fallbackFalImage } from "./providers/fal";
+import {
+  falGenerateImage,
+  falGenerateVideo,
+  fallbackFalImage,
+  fallbackFalVideo,
+} from "./providers/fal";
 import { fallbackLessonPlan, generateLessonPlan } from "./providers/llm";
 import {
   type ExtractedEntity,
   heuristicExtract,
   pioneerExtract,
 } from "./providers/pioneer";
-import { describeSlngClientSetup } from "./providers/slng";
+import {
+  describeSlngClientSetup,
+  slngTextToSpeech,
+  slngTtsModel,
+} from "./providers/slng";
 import { fallbackTavilyResults, tavilySearch } from "./providers/tavily";
 import type { StreamEvent } from "./stream-events";
 
@@ -264,6 +277,8 @@ export async function* generateLessonStream(input: {
     const quizId = "quiz-main";
     const reflId = "refl-main";
     const mediaId = "media-cover";
+    const videoId = "media-video";
+    const audioId = "media-audio";
 
     const patches: LessonPatchOp[] = [
       {
@@ -318,6 +333,18 @@ export async function* generateLessonStream(input: {
       },
       {
         op: "add_node",
+        parentId: secHook,
+        node: {
+          id: videoId,
+          type: "media",
+          title: "Motion preview",
+          modality: "video",
+          alt: `Short classroom-safe video related to ${topic}`,
+          status: "pending",
+        },
+      },
+      {
+        op: "add_node",
         parentId: "root",
         node: {
           id: secExplain,
@@ -334,6 +361,24 @@ export async function* generateLessonStream(input: {
           type: "text",
           format: "markdown",
           body: lessonPlan.explanationBody,
+        },
+      },
+      {
+        op: "add_node",
+        parentId: secExplain,
+        node: {
+          id: audioId,
+          type: "media",
+          title: "Narration audio",
+          modality: "audio",
+          alt: `Narration summary for ${topic}`,
+          status: input.readiness.slng ? "pending" : "failed",
+          provenance: {
+            provider: "slng",
+            model: slngTtsModel(input.env),
+            prompt: lessonPlan.explanationBody.slice(0, 900),
+            createdAt: new Date().toISOString(),
+          },
         },
       },
       {
@@ -438,6 +483,12 @@ export async function* generateLessonStream(input: {
         falUsedFallback = true;
       }
     }
+    const storedImage = await mirrorRemoteAssetToS3({
+      asset: image,
+      lessonId,
+      nodeId: mediaId,
+      env: input.env,
+    }).catch(() => image);
     const readyMedia = {
       id: mediaId,
       type: "media" as const,
@@ -446,14 +497,14 @@ export async function* generateLessonStream(input: {
       alt: `Illustration related to ${topic}`,
       status: "ready" as const,
       asset: {
-        url: image.url,
-        mime: image.mime,
-        width: image.width,
-        height: image.height,
+        url: storedImage.url,
+        mime: storedImage.mime,
+        width: storedImage.width,
+        height: storedImage.height,
       },
       provenance: {
         provider: "fal" as const,
-        model: process.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell",
+        model: input.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell",
         prompt,
         createdAt: new Date().toISOString(),
       },
@@ -467,7 +518,7 @@ export async function* generateLessonStream(input: {
       runId,
       stepId: s5,
       provider: "fal",
-      detail: image.url,
+      detail: storedImage.url,
       usedFallback: falUsedFallback,
     };
 
@@ -476,6 +527,141 @@ export async function* generateLessonStream(input: {
       type: "provider_started",
       runId,
       stepId: s6,
+      provider: "fal",
+      label: "Generative lesson video (fal)",
+    };
+    const videoPrompt = `Create a short educational video for lesson: ${topic}. Show motion that clarifies the concept for students. No on-screen text, classroom-safe, calm narration-style audio if the model supports audio.`;
+    let falVideoUsedFallback = !input.readiness.fal;
+    let video = fallbackFalVideo(topic);
+    if (input.readiness.fal) {
+      try {
+        video = await falGenerateVideo(videoPrompt, input.env);
+        falVideoUsedFallback = false;
+      } catch {
+        video = fallbackFalVideo(topic);
+        falVideoUsedFallback = true;
+      }
+    }
+    const storedVideo = await mirrorRemoteAssetToS3({
+      asset: video,
+      lessonId,
+      nodeId: videoId,
+      env: input.env,
+    }).catch(() => video);
+    const readyVideo = {
+      id: videoId,
+      type: "media" as const,
+      title: "Motion preview",
+      modality: "video" as const,
+      alt: `Short classroom-safe video related to ${topic}`,
+      status: "ready" as const,
+      asset: {
+        url: storedVideo.url,
+        mime: storedVideo.mime,
+      },
+      provenance: {
+        provider: "fal" as const,
+        model: input.env.FAL_VIDEO_MODEL ?? "fal-ai/veo3.1/fast",
+        prompt: videoPrompt,
+        createdAt: new Date().toISOString(),
+      },
+    };
+    const videoPatch: LessonPatchOp = { op: "replace_node", node: readyVideo };
+    doc = applyLessonPatch(doc, videoPatch);
+    yield { type: "lesson_patch", runId, patch: videoPatch };
+    yield { type: "lesson_snapshot", runId, lesson: doc };
+    yield {
+      type: "provider_completed",
+      runId,
+      stepId: s6,
+      provider: "fal",
+      detail: storedVideo.url,
+      usedFallback: falVideoUsedFallback,
+    };
+
+    const s7 = step();
+    yield {
+      type: "provider_started",
+      runId,
+      stepId: s7,
+      provider: "slng",
+      label: "Narration audio (SLNG)",
+    };
+    const narrationText = lessonPlan.explanationBody.slice(0, 900);
+    let audioUsedFallback = !input.readiness.slng;
+    const audioAssetUrl = `/api/audio?text=${encodeURIComponent(narrationText)}`;
+    let readyAudio = {
+      id: audioId,
+      type: "media" as const,
+      title: "Narration audio",
+      modality: "audio" as const,
+      alt: `Narration summary for ${topic}`,
+      status: input.readiness.slng ? ("ready" as const) : ("failed" as const),
+      asset: input.readiness.slng
+        ? {
+            url: audioAssetUrl,
+            mime: "audio/wav",
+          }
+        : undefined,
+      provenance: {
+        provider: "slng" as const,
+        model: slngTtsModel(input.env),
+        prompt: narrationText,
+        createdAt: new Date().toISOString(),
+      },
+    };
+    if (input.readiness.slng) {
+      try {
+        const audio = await slngTextToSpeech({
+          text: narrationText,
+          env: input.env,
+        });
+        const storedAudio = await uploadGeneratedBytesToS3({
+          bytes: audio.bytes,
+          contentType: audio.mime,
+          lessonId,
+          nodeId: audioId,
+          env: input.env,
+        }).catch(() => null);
+        readyAudio = {
+          ...readyAudio,
+          asset: {
+            url: storedAudio?.url ?? audioAssetUrl,
+            mime: audio.mime,
+          },
+          provenance: {
+            ...readyAudio.provenance,
+            model: audio.model,
+          },
+        };
+        audioUsedFallback = false;
+      } catch {
+        readyAudio = {
+          ...readyAudio,
+          status: "failed",
+          asset: undefined,
+        };
+        audioUsedFallback = true;
+      }
+    }
+    const audioPatch: LessonPatchOp = { op: "replace_node", node: readyAudio };
+    doc = applyLessonPatch(doc, audioPatch);
+    yield { type: "lesson_patch", runId, patch: audioPatch };
+    yield { type: "lesson_snapshot", runId, lesson: doc };
+    yield {
+      type: "provider_completed",
+      runId,
+      stepId: s7,
+      provider: "slng",
+      detail: readyAudio.asset?.url ?? "Audio unavailable",
+      usedFallback: audioUsedFallback,
+    };
+
+    const s8 = step();
+    yield {
+      type: "provider_started",
+      runId,
+      stepId: s8,
       provider: "orchestrator",
       label: "Persist sandboxed HTML lesson",
     };
@@ -493,7 +679,7 @@ export async function* generateLessonStream(input: {
     yield {
       type: "provider_completed",
       runId,
-      stepId: s6,
+      stepId: s8,
       provider: "orchestrator",
       detail: "Saved HTML lesson version to Postgres",
     };
