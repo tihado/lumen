@@ -1,8 +1,35 @@
-import { getAppEnv, getProviderReadiness } from "@/lib/env";
+import {
+  getAppEnv,
+  getDatabaseAvailability,
+  getProviderReadiness,
+} from "@/lib/env";
 import { generateLessonStream } from "@/lib/orchestrator/generate-lesson";
+import type { StreamEvent } from "@/lib/orchestrator/stream-events";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+function streamEvents(events: StreamEvent[], init?: ResponseInit) {
+  const enc = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const ev of events) {
+          controller.enqueue(enc.encode(`${JSON.stringify(ev)}\n`));
+        }
+        controller.close();
+      },
+    }),
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store",
+        ...init?.headers,
+      },
+    }
+  );
+}
 
 export async function POST(request: Request) {
   let transcript = "";
@@ -30,6 +57,20 @@ export async function POST(request: Request) {
 
   const env = getAppEnv();
   const readiness = getProviderReadiness(env);
+  const database = getDatabaseAvailability(env);
+
+  if (!database.configured) {
+    return streamEvents(
+      [
+        {
+          type: "run_failed",
+          runId: "local",
+          message: database.message,
+        },
+      ],
+      { status: 200 }
+    );
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {

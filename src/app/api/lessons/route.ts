@@ -1,8 +1,21 @@
+import { getAppEnv, getDatabaseAvailability } from "@/lib/env";
 import { listLessons } from "@/lib/lesson/repository";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  const database = getDatabaseAvailability(getAppEnv());
+  if (!database.configured) {
+    return Response.json(
+      {
+        error: database.message,
+        code: database.code,
+        action: database.action,
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const rows = await listLessons();
     return Response.json({ lessons: rows });

@@ -1,8 +1,9 @@
-import { BookOpen, Clock, ExternalLink } from "lucide-react";
+import { BookOpen, Clock, Database, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getAppEnv, getDatabaseAvailability } from "@/lib/env";
 import { listLessons } from "@/lib/lesson/repository";
 import { cn } from "@/lib/utils";
 
@@ -12,10 +13,14 @@ export const dynamic = "force-dynamic";
 export default async function LessonsPage() {
   let rows: Awaited<ReturnType<typeof listLessons>> = [];
   let error: string | null = null;
-  try {
-    rows = await listLessons();
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e);
+  const database = getDatabaseAvailability(getAppEnv());
+
+  if (database.configured) {
+    try {
+      rows = await listLessons();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
   }
 
   return (
@@ -35,6 +40,28 @@ export default async function LessonsPage() {
         </Link>
       </div>
 
+      {database.configured ? null : (
+        <Card className="bg-white/82">
+          <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
+            <div className="flex size-12 items-center justify-center rounded-xl bg-secondary text-primary">
+              <Database className="size-7" />
+            </div>
+            <div>
+              <p className="font-medium">Database setup needed</p>
+              <p className="mt-1 max-w-xl text-muted-foreground text-sm">
+                {database.message}
+              </p>
+              <p className="mt-2 max-w-xl font-medium text-muted-foreground text-xs">
+                {database.action}
+              </p>
+            </div>
+            <Link className={buttonVariants()} href="/studio">
+              Back to Studio
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
       {error ? (
         <Card className="bg-white/82">
           <CardContent className="p-6 text-destructive text-sm">
@@ -43,7 +70,7 @@ export default async function LessonsPage() {
         </Card>
       ) : null}
 
-      {rows.length === 0 && !error ? (
+      {rows.length === 0 && !error && database.configured ? (
         <Card className="bg-white/82">
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
             <div className="flex size-12 items-center justify-center rounded-xl bg-secondary text-primary">

@@ -1,3 +1,4 @@
+import { getAppEnv, getDatabaseAvailability } from "@/lib/env";
 import { getLessonWithCurrentVersion } from "@/lib/lesson/repository";
 
 export const runtime = "nodejs";
@@ -7,6 +8,18 @@ export async function GET(
   { params }: { params: Promise<{ lessonId: string }> }
 ) {
   const { lessonId } = await params;
+  const database = getDatabaseAvailability(getAppEnv());
+  if (!database.configured) {
+    return Response.json(
+      {
+        error: database.message,
+        code: database.code,
+        action: database.action,
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const result = await getLessonWithCurrentVersion(lessonId);
     if (!result) {

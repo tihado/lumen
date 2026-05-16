@@ -1,4 +1,8 @@
-import { getAppEnv, getProviderReadiness } from "@/lib/env";
+import {
+  getAppEnv,
+  getDatabaseAvailability,
+  getProviderReadiness,
+} from "@/lib/env";
 import { getLessonWithCurrentVersion } from "@/lib/lesson/repository";
 import { generateLessonStream } from "@/lib/orchestrator/generate-lesson";
 
@@ -10,6 +14,19 @@ export async function POST(
   { params }: { params: Promise<{ lessonId: string }> }
 ) {
   const { lessonId } = await params;
+  const env = getAppEnv();
+  const database = getDatabaseAvailability(env);
+  if (!database.configured) {
+    return Response.json(
+      {
+        error: database.message,
+        code: database.code,
+        action: database.action,
+      },
+      { status: 503 }
+    );
+  }
+
   const existing = await getLessonWithCurrentVersion(lessonId);
   if (!existing) {
     return Response.json({ error: "Lesson not found" }, { status: 404 });
@@ -25,7 +42,6 @@ export async function POST(
     /* empty body is allowed */
   }
 
-  const env = getAppEnv();
   const readiness = getProviderReadiness(env);
   let failed: string | null = null;
   for await (const ev of generateLessonStream({

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getAppEnv, getProviderReadiness } from "./env";
+import {
+  getAppEnv,
+  getDatabaseAvailability,
+  getProviderReadiness,
+} from "./env";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -20,5 +24,24 @@ describe("getAppEnv", () => {
     expect(env.PIONEER_API_URL).toBeUndefined();
     expect(readiness.fal).toBe(true);
     expect(readiness.pioneer).toBe(false);
+  });
+
+  it("reports missing DATABASE_URL as an actionable app state", () => {
+    process.env.DATABASE_URL = "";
+
+    const database = getDatabaseAvailability(getAppEnv());
+
+    expect(database.configured).toBe(false);
+    if (!database.configured) {
+      expect(database.code).toBe("database_url_missing");
+      expect(database.message).toContain("DATABASE_URL");
+      expect(database.action).toContain("pnpm run db:migrate");
+    }
+  });
+
+  it("reports DATABASE_URL as configured when present", () => {
+    process.env.DATABASE_URL = "postgres://user:pass@localhost:5432/next_learn";
+
+    expect(getDatabaseAvailability(getAppEnv())).toEqual({ configured: true });
   });
 });

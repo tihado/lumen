@@ -34,6 +34,21 @@ export type AppEnv = z.infer<typeof envSchema> & {
   mode: "development" | "production" | "test";
 };
 
+export type DatabaseAvailability =
+  | { configured: true }
+  | {
+      configured: false;
+      code: "database_url_missing";
+      message: string;
+      action: string;
+    };
+
+export const MISSING_DATABASE_URL_MESSAGE =
+  "Lesson saving is not configured yet. Add DATABASE_URL to your environment and run the database migrations before generating or opening saved lessons.";
+
+export const MISSING_DATABASE_URL_ACTION =
+  "Set DATABASE_URL in .env.local, then run pnpm run db:migrate and restart the dev server.";
+
 function optionalEnv(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -91,5 +106,20 @@ export function getProviderReadiness(
     fal: Boolean(env.FAL_API_KEY ?? env.FAL_KEY),
     pioneer: Boolean(env.PIONEER_API_URL),
     slng: Boolean(env.SLNG_API_KEY && env.SLNG_API_BASE_URL),
+  };
+}
+
+export function getDatabaseAvailability(
+  env: AppEnv = getAppEnv()
+): DatabaseAvailability {
+  if (env.DATABASE_URL) {
+    return { configured: true };
+  }
+
+  return {
+    configured: false,
+    code: "database_url_missing",
+    message: MISSING_DATABASE_URL_MESSAGE,
+    action: MISSING_DATABASE_URL_ACTION,
   };
 }

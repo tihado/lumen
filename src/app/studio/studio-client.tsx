@@ -9,6 +9,7 @@ import {
   Palette,
   Play,
   Sparkles,
+  TriangleAlert,
   WandSparkles,
 } from "lucide-react";
 import Image from "next/image";
@@ -29,6 +30,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { VoiceSessionController } from "@/components/voice/VoiceSessionController";
+import type { DatabaseAvailability } from "@/lib/env";
 import { applyLessonPatch } from "@/lib/lesson/patches";
 import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
 import { readStudioState } from "@/lib/lesson/studio-state";
@@ -44,8 +46,10 @@ type LiveTimelineRow = Omit<StudioTimelineRow, "status"> & {
 };
 
 export function StudioClient({
+  databaseAvailability,
   initialLessonId,
 }: {
+  databaseAvailability: DatabaseAvailability;
   initialLessonId?: string;
 }) {
   const router = useRouter();
@@ -83,6 +87,10 @@ export function StudioClient({
     if (!initialLessonId) {
       return;
     }
+    if (!databaseAvailability.configured) {
+      setError(databaseAvailability.message);
+      return;
+    }
     let cancelled = false;
     async function loadStudioState() {
       setError(null);
@@ -91,7 +99,12 @@ export function StudioClient({
           cache: "no-store",
         });
         if (!res.ok) {
-          throw new Error(`Could not load lesson ${initialLessonId}`);
+          const payload = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(
+            payload?.error ?? `Could not load lesson ${initialLessonId}`
+          );
         }
         const payload = (await res.json()) as {
           lesson?: { id?: string; title?: string; prompt?: string } | null;
@@ -121,7 +134,7 @@ export function StudioClient({
     return () => {
       cancelled = true;
     };
-  }, [initialLessonId]);
+  }, [databaseAvailability, initialLessonId]);
 
   const clearRunningTimer = useCallback((key: string) => {
     const timer = runningTimersRef.current.get(key);
@@ -176,6 +189,10 @@ export function StudioClient({
   useEffect(() => clearRunningTimers, [clearRunningTimers]);
 
   const runGeneration = useCallback(async () => {
+    if (!databaseAvailability.configured) {
+      setError(databaseAvailability.message);
+      return;
+    }
     clearRunningTimers();
     setBusy(true);
     setError(null);
@@ -257,6 +274,7 @@ export function StudioClient({
   }, [
     clearRunningTimer,
     clearRunningTimers,
+    databaseAvailability,
     pushTimeline,
     router,
     savedLessonId,
@@ -472,7 +490,7 @@ export function StudioClient({
               />
               <Button
                 className="h-10 w-full rounded-2xl bg-[linear-gradient(135deg,oklch(0.68_0.14_174),oklch(0.78_0.16_83))] text-sm shadow-[0_16px_34px_oklch(0.58_0.13_150/0.24)] hover:brightness-105"
-                disabled={busy}
+                disabled={busy || !databaseAvailability.configured}
                 onClick={() => {
                   runGeneration().catch(() => {
                     /* errors handled inside runGeneration */
@@ -492,6 +510,20 @@ export function StudioClient({
                   </>
                 )}
               </Button>
+              {databaseAvailability.configured ? null : (
+                <div className="rounded-2xl border border-amber-300/70 bg-amber-50/90 p-3 text-amber-950 text-sm">
+                  <p className="flex items-center gap-2 font-medium">
+                    <TriangleAlert className="size-4" />
+                    Database setup needed
+                  </p>
+                  <p className="mt-1 leading-relaxed">
+                    {databaseAvailability.message}
+                  </p>
+                  <p className="mt-2 font-medium text-xs">
+                    {databaseAvailability.action}
+                  </p>
+                </div>
+              )}
               {error ? (
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
