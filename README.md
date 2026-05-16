@@ -4,7 +4,7 @@
 
 **Lumen** is a **voice-first AI lesson authoring** web app. A teacher speaks or types a lesson intent, and Lumen turns it into a structured lesson canvas: learning objectives, hook, explanation, worked example, practice activity, quiz, reflection, citations, images, video, audio narration, and a saved HTML lesson that can be reopened later.
 
-The core idea is not simply “ask an LLM for text.” Lumen behaves like an **AI lesson agent**: it captures intent, gathers sources, extracts entities, plans the lesson, storyboards media, generates multimodal assets, streams patches into the UI, and persists the full state in PostgreSQL so teachers can review, edit, and reuse the result.
+The core idea is not simply “ask an LLM for text.” Lumen behaves like an **AI lesson agent**: it captures intent, gathers sources, extracts entities, plans the lesson, storyboards media, generates multimodal assets, streams patches into the UI, and persists the full state in PostgreSQL so teachers can review, edit, and reuse the result. The **SLNG Voice Agent** path also lets the teacher open a live voice session for rehearsal feedback with lesson context.
 
 <p align="center">
   <img src="imgs/dashboard.png" alt="Lumen home and dashboard" width="580"><br>
@@ -37,7 +37,8 @@ Main user flow:
 5. The teacher can watch provider progress for OpenAI, Tavily, Pioneer, fal, SLNG, and the orchestrator.
 6. The canvas renders lesson blocks: text, sections, objectives, activities, quiz, reflection, and media.
 7. The user can retry media, edit supported blocks, save the lesson, and reopen it from `/lessons`.
-8. The final lesson is rendered as sandboxed HTML at `/lesson/[lessonId]`.
+8. From Studio or the saved lesson page, the teacher can start the **SLNG voice agent** to rehearse the lesson, answer student-style questions, and get concrete improvement suggestions.
+9. The final lesson is rendered as sandboxed HTML at `/lesson/[lessonId]`.
 
 ---
 
@@ -46,6 +47,7 @@ Main user flow:
 | Feature                      | Description                                                                                                                                                         |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Voice-first authoring**    | Captures lesson intent through `/api/voice/transcribe` with SLNG, with typed input always available.                                                                |
+| **SLNG voice agent**         | Creates a LiveKit-backed web session through `/api/voice/agent-session` so teachers can rehearse with an agent that receives lesson title, summary, and transcript. |
 | **AI lesson agent**          | The orchestrator coordinates research, extraction, planning, media generation, runtime generation, and persistence.                                                 |
 | **Live NDJSON stream**       | `/api/generate` returns one event per line so Studio can update the timeline and canvas as each stage completes.                                                    |
 | **Editable lesson canvas**   | Lessons are represented as schema-backed documents and patches (`add_node`, `replace_node`, `set_meta`, `set_citations`) instead of one opaque text blob.           |
@@ -108,18 +110,39 @@ Browser redirects to /lesson/[lessonId]
 
 ### Agent Responsibilities
 
-| Stage                  | Provider / module                                            | What it does                                                                      |
-| ---------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| **Intent intake**      | `src/app/studio/studio-client.tsx`, `VoiceSessionController` | Collects a typed or spoken transcript and sends it to `/api/generate`.            |
-| **Provider readiness** | `src/lib/env.ts`                                             | Checks which providers are configured and marks each one as `live` or `fallback`. |
-| **Research**           | `providers/tavily.ts`                                        | Fetches web excerpts for source grounding and misconception context.              |
-| **Extraction**         | `providers/pioneer.ts`                                       | Extracts entities and concepts to sharpen vocabulary and lesson focus.            |
-| **Planning**           | `providers/llm.ts`                                           | Uses AI SDK + OpenAI to generate a `LessonPlan` that satisfies a Zod schema.      |
-| **Document building**  | `src/lib/lesson/patches.ts`, `schema.ts`                     | Converts the plan into a lesson document through patch operations.                |
-| **Media creation**     | `providers/fal.ts`                                           | Generates images and videos for specific instructional moments.                   |
-| **Audio creation**     | `providers/slng.ts`                                          | Generates narration audio from the explanation summary.                           |
-| **Artifact packaging** | `src/lib/lesson/html-artifact.ts`                            | Produces sandboxed HTML plus a spec that can be reopened later.                   |
-| **Persistence**        | `src/lib/lesson/repository.ts`, `src/db/schema.ts`           | Saves the lesson, version, and generation run to PostgreSQL.                      |
+| Stage                  | Provider / module                                            | What it does                                                                        |
+| ---------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| **Intent intake**      | `src/app/studio/studio-client.tsx`, `VoiceSessionController` | Collects a typed or spoken transcript and sends it to `/api/generate`.              |
+| **Provider readiness** | `src/lib/env.ts`                                             | Checks which providers are configured and marks each one as `live` or `fallback`.   |
+| **Research**           | `providers/tavily.ts`                                        | Fetches web excerpts for source grounding and misconception context.                |
+| **Extraction**         | `providers/pioneer.ts`                                       | Extracts entities and concepts to sharpen vocabulary and lesson focus.              |
+| **Planning**           | `providers/llm.ts`                                           | Uses AI SDK + OpenAI to generate a `LessonPlan` that satisfies a Zod schema.        |
+| **Document building**  | `src/lib/lesson/patches.ts`, `schema.ts`                     | Converts the plan into a lesson document through patch operations.                  |
+| **Media creation**     | `providers/fal.ts`                                           | Generates images and videos for specific instructional moments.                     |
+| **Audio creation**     | `providers/slng.ts`                                          | Generates narration audio from the explanation summary.                             |
+| **Voice agent**        | `providers/slng.ts`, `/api/voice/agent-session`              | Creates SLNG Voice Agent web sessions and passes lesson context as agent arguments. |
+| **Artifact packaging** | `src/lib/lesson/html-artifact.ts`                            | Produces sandboxed HTML plus a spec that can be reopened later.                     |
+| **Persistence**        | `src/lib/lesson/repository.ts`, `src/db/schema.ts`           | Saves the lesson, version, and generation run to PostgreSQL.                        |
+
+### SLNG Voice Agent
+
+Lumen uses SLNG in three separate ways:
+
+| SLNG capability         | Path / module                       | What Lumen does                                                                  |
+| ----------------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| Speech-to-text          | `POST /api/voice/transcribe`        | Accepts recorded browser audio and returns a transcript for lesson generation.   |
+| Text-to-speech          | `GET /api/audio`, `POST /api/audio` | Generates narration audio for lesson explanations and optional saved artifacts.  |
+| Voice agent web session | `POST /api/voice/agent-session`     | Creates a LiveKit session for a configured SLNG Agent and passes lesson context. |
+
+The voice agent is used as a teaching/rehearsal layer, not as the main lesson generator. The route sends these arguments to SLNG when creating the web session: `demo_mode`, `lesson_id`, `lesson_title`, `lesson_summary`, `teacher_transcript`, and `product_context`. The current product context asks the agent to help the teacher rehearse, ask one useful student-style question at a time, and suggest concrete lesson improvements.
+
+For demos, configure the SLNG agent itself in the SLNG dashboard, then set `SLNG_AGENT_ID` in `.env.local`. The app-side session endpoint for the agent is:
+
+```text
+POST /api/voice/agent-session
+```
+
+That endpoint is called by the Lumen UI; it creates the SLNG web session through `SLNG_AGENT_API_BASE_URL` and returns `livekitUrl`, `livekitToken`, `roomName`, `callId`, and optional `maxSessionSeconds` to the browser. The browser joins the session with `@livekit/components-react`.
 
 ### Stream Events
 
@@ -204,13 +227,13 @@ Core document schema in `src/lib/lesson/schema.ts`:
 
 ## Hackathon Sponsors & APIs
 
-| Sponsor                                                          | Role in Lumen                                                          | Env / code                                                                                   |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [OpenAI](https://openai.com)                                     | Structured lesson planning and runtime/code generation through AI SDK. | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_CODE_MODEL`; `providers/llm.ts`, `/api/openai`     |
-| [Tavily](https://www.tavily.com/)                                | Web-aware research, excerpts, and citations.                           | `TAVILY_API_KEY`; `providers/tavily.ts`                                                      |
-| [Pioneer](https://pioneer.ai/) by [Fastino](https://fastino.ai/) | Entity/schema extraction.                                              | `PIONEER_API_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID`; `providers/pioneer.ts`             |
-| [fal](https://fal.ai/)                                           | Image/video generation for storyboarded lesson media.                  | `FAL_KEY` or `FAL_API_KEY`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`; `providers/fal.ts`         |
-| [SLNG](https://slng.ai/)                                         | Speech-to-text and text-to-speech.                                     | `SLNG_API_KEY`, `SLNG_API_BASE_URL`, `SLNG_STT_MODEL`, `SLNG_TTS_MODEL`; `providers/slng.ts` |
+| Sponsor                                                          | Role in Lumen                                                          | Env / code                                                                                                                                                           |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [OpenAI](https://openai.com)                                     | Structured lesson planning and runtime/code generation through AI SDK. | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_CODE_MODEL`; `providers/llm.ts`, `/api/openai`                                                                             |
+| [Tavily](https://www.tavily.com/)                                | Web-aware research, excerpts, and citations.                           | `TAVILY_API_KEY`; `providers/tavily.ts`                                                                                                                              |
+| [Pioneer](https://pioneer.ai/) by [Fastino](https://fastino.ai/) | Entity/schema extraction.                                              | `PIONEER_API_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID`; `providers/pioneer.ts`                                                                                     |
+| [fal](https://fal.ai/)                                           | Image/video generation for storyboarded lesson media.                  | `FAL_KEY` or `FAL_API_KEY`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`; `providers/fal.ts`                                                                                 |
+| [SLNG](https://slng.ai/)                                         | Speech-to-text, text-to-speech, and the rehearsal voice agent.         | `SLNG_API_KEY`, `SLNG_API_BASE_URL`, `SLNG_AGENT_API_BASE_URL`, `SLNG_AGENT_ID`, `SLNG_STT_MODEL`, `SLNG_TTS_MODEL`; `providers/slng.ts`, `/api/voice/agent-session` |
 
 Optional storage: S3-compatible media mirroring through `S3_*` / `AWS_*` variables in `src/lib/env.ts`.
 
@@ -246,19 +269,22 @@ PIONEER_API_KEY="..."
 FAL_KEY="..."
 SLNG_API_KEY="..."
 SLNG_API_BASE_URL="..."
+SLNG_AGENT_API_BASE_URL="https://api.agents.slng.ai"
+SLNG_AGENT_ID="..."
 ```
 
 Minimum for full generation persistence:
 
-| Variable                              | Required?   | Notes                                                                           |
-| ------------------------------------- | ----------- | ------------------------------------------------------------------------------- |
-| `DATABASE_URL`                        | Yes         | `/api/generate` returns a streamed failure when the database is not configured. |
-| `OPENAI_API_KEY`                      | Recommended | Without it, lesson planning and runtime generation use deterministic fallbacks. |
-| `TAVILY_API_KEY`                      | Optional    | Without it, source cards use fallback examples.                                 |
-| `PIONEER_API_URL` + `PIONEER_API_KEY` | Optional    | Without it, entity extraction uses a heuristic fallback.                        |
-| `FAL_KEY` or `FAL_API_KEY`            | Optional    | Without it, image/video generation uses fallback assets.                        |
-| `SLNG_API_KEY` + `SLNG_API_BASE_URL`  | Optional    | Without it, voice/TTS features fall back or mark audio unavailable.             |
-| `S3_BUCKET` + `AWS_*` / `S3_*`        | Optional    | Mirrors generated media/audio to stable URLs.                                   |
+| Variable                                    | Required?   | Notes                                                                               |
+| ------------------------------------------- | ----------- | ----------------------------------------------------------------------------------- |
+| `DATABASE_URL`                              | Yes         | `/api/generate` returns a streamed failure when the database is not configured.     |
+| `OPENAI_API_KEY`                            | Recommended | Without it, lesson planning and runtime generation use deterministic fallbacks.     |
+| `TAVILY_API_KEY`                            | Optional    | Without it, source cards use fallback examples.                                     |
+| `PIONEER_API_URL` + `PIONEER_API_KEY`       | Optional    | Without it, entity extraction uses a heuristic fallback.                            |
+| `FAL_KEY` or `FAL_API_KEY`                  | Optional    | Without it, image/video generation uses fallback assets.                            |
+| `SLNG_API_KEY` + `SLNG_API_BASE_URL`        | Optional    | Without it, voice/TTS features fall back or mark audio unavailable.                 |
+| `SLNG_AGENT_ID` + `SLNG_AGENT_API_BASE_URL` | Optional    | Enables the SLNG Voice Agent web-session endpoint. `SLNG_API_KEY` is also required. |
+| `S3_BUCKET` + `AWS_*` / `S3_*`              | Optional    | Mirrors generated media/audio to stable URLs.                                       |
 
 Full parsing logic lives in [`src/lib/env.ts`](./src/lib/env.ts).
 
@@ -287,17 +313,18 @@ pnpm run format
 
 ## HTTP API Reference
 
-| Method & path                             | Body / query                                   | Response                             |
-| ----------------------------------------- | ---------------------------------------------- | ------------------------------------ |
-| `POST /api/generate`                      | `{ transcript, lessonId? }`                    | NDJSON stream, `maxDuration = 120`   |
-| `POST /api/media`                         | `{ prompt, modality?: "image" \| "video" }`    | Generated/fallback media JSON        |
-| `GET /api/audio?text=`                    | query `text`                                   | SLNG TTS bytes or S3-backed response |
-| `POST /api/audio`                         | `{ text }`                                     | SLNG TTS bytes                       |
-| `POST /api/voice/transcribe`              | `multipart/form-data` with `audio`             | Transcript JSON                      |
-| `POST /api/openai`                        | `{ mode: "text" \| "json" \| "code", prompt }` | Utility generation payload           |
-| `GET /api/lessons`                        | none                                           | Saved lessons                        |
-| `GET /api/lessons/[lessonId]`             | none                                           | Lesson and current version           |
-| `POST /api/lessons/[lessonId]/regenerate` | optional `{ prompt }`                          | Refreshed lesson JSON                |
+| Method & path                             | Body / query                                                                            | Response                             |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------ |
+| `POST /api/generate`                      | `{ transcript, lessonId? }`                                                             | NDJSON stream, `maxDuration = 120`   |
+| `POST /api/media`                         | `{ prompt, modality?: "image" \| "video" }`                                             | Generated/fallback media JSON        |
+| `GET /api/audio?text=`                    | query `text`                                                                            | SLNG TTS bytes or S3-backed response |
+| `POST /api/audio`                         | `{ text }`                                                                              | SLNG TTS bytes                       |
+| `POST /api/voice/transcribe`              | `multipart/form-data` with `audio`                                                      | Transcript JSON                      |
+| `POST /api/voice/agent-session`           | `{ participantName?, lessonTitle?, lessonSummary?, transcript?, lessonId?, demoMode? }` | SLNG LiveKit web-session JSON        |
+| `POST /api/openai`                        | `{ mode: "text" \| "json" \| "code", prompt }`                                          | Utility generation payload           |
+| `GET /api/lessons`                        | none                                                                                    | Saved lessons                        |
+| `GET /api/lessons/[lessonId]`             | none                                                                                    | Lesson and current version           |
+| `POST /api/lessons/[lessonId]/regenerate` | optional `{ prompt }`                                                                   | Refreshed lesson JSON                |
 
 ---
 
@@ -306,7 +333,7 @@ pnpm run format
 ```text
 src/
   app/
-    api/                      # Route Handlers: generate, media, audio, voice, openai, lessons
+    api/                      # Route Handlers: generate, media, audio, voice, voice-agent sessions, openai, lessons
     studio/                   # Teacher workspace
     lesson/[lessonId]/        # Saved lesson runtime page
     lessons/                  # Saved lessons list
@@ -351,6 +378,7 @@ Path alias: `@/*` maps to `./src/*`.
 - **Patch-first document model:** the UI does not wait for the whole lesson to finish. It can render snapshots as soon as patches arrive.
 - **Provider isolation:** all provider keys stay server-side in route handlers and provider modules.
 - **Fallback-first demoability:** missing API keys should degrade quality, not break the interface.
+- **Voice agent as rehearsal:** SLNG Agent sessions receive lesson context and help teachers practice delivery after the canvas exists.
 - **Provenance-aware media:** generated media stores provider/model/prompt metadata so teachers can inspect and retry assets.
 - **Sandboxed lesson delivery:** saved lessons are rendered from stored HTML/spec, reducing coupling between generation-time state and runtime display.
 - **Versioned persistence:** saved artifacts are immutable versions; the lesson row points to the current version.
@@ -363,6 +391,7 @@ Path alias: `@/*` maps to `./src/*`.
 - Run Drizzle migrations before enabling generation.
 - `POST /api/generate` can take time because it calls multiple providers; keep route duration limits aligned with `maxDuration = 120`.
 - Configure S3 CORS if browsers must fetch mirrored media cross-origin.
+- For the SLNG voice agent, set `SLNG_AGENT_ID` and keep the deployed `POST /api/voice/agent-session` route reachable over HTTPS. If the SLNG dashboard needs an app URL to launch web sessions, use this route. If it needs event webhooks/callbacks, add a separate adapter route for that callback shape.
 - Keep provider fallback behavior in mind: a successful demo does not always mean all live providers are configured.
 
 ---
