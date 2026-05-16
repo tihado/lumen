@@ -67,6 +67,14 @@ A voice-first AI web application that helps teachers create **editable multimedi
 | **Pioneer (Fastino) / GLiNER2** | Structured extraction    | Turn unstructured text (teacher + search results) into **typed entities** aligned to the lesson schema |
 | **fal**                         | Generative media         | Produce **images/video** assets bound to specific canvas nodes                                         |
 
+### 2.6 Product summary & pitch (hackathon)
+
+**One-paragraph product:** A teacher speaks a lesson request. The app transcribes the voice (**SLNG**), researches supporting material (**Tavily**), extracts a structured lesson schema (**Pioneer / GLiNER2**), generates images and a short video (**fal**), and assembles everything into an **editable canvas** with text, image, video, quiz, and activity blocks. The teacher can then speak follow-up commands (“make it shorter,” “add a group activity,” “change the image style”) and the canvas updates live. Final output: **save** or **export**.
+
+**Pitch line (judges / sticky note):** *“Other AI tools give teachers a wall of text. We give them an editable, multimedia lesson canvas — and they build it with their voice in 90 seconds.”*
+
+**Spoken pitch skeleton (optional, ~30s):** Teachers spend hours preparing materials for a short class. We compress that into **voice in, lesson out** — not a wall of text, but an **editable multimedia canvas**: diagrams, short motion, quizzes, activities. Close with: *“Editable. Multimedia. Voice-first. That’s the difference.”* (Demo follows §4.6.)
+
 **Design principle:** each provider does what it is best at; **orchestration** (likely an LLM + deterministic validators on the server) merges outputs into one **canonical lesson document** (§6).
 
 ---
@@ -123,6 +131,46 @@ Teacher selects a block → “regenerate this image / simplify this paragraph�
 **J3 — Trust check**
 
 Teacher opens “sources” drawer on a factual block → sees Tavily hits + excerpts + links.
+
+### 4.4 Narrative scenario — “Mai” (primary)
+
+**Persona:** Mai — middle-school science teacher, ~20 minutes between classes, needs a **water cycle** lesson for tomorrow.
+
+**Flow (target UX):**
+
+1. Opens the app → clean **home** with one primary CTA: *“What do you want to teach today?”* and a **large microphone** (see §9.5).
+2. Taps mic, speaks the full lesson request (topic, duration, grade, requested blocks: diagram, short animation, real-life example, quiz count).
+3. **Live transcript** appears as she speaks; on stop, **TTS** (optional but demo-strong): *“Got it. English, or bilingual?”* — she answers *English*.
+4. **Right side** fills **progressively**: research status card → canvas **skeleton** with placeholders → **image** resolves → **video** resolves (never a long empty screen; see §9.5 progressive reveal).
+5. Voice edit: *“Make the explanation shorter and add a 3-minute group activity.”* — text updates **in place**; new **activity** block appears.
+6. Voice edit: *“Make the image friendlier for younger students.”* — **regenerate** image (same block id, new asset).
+7. **Export** → PDF download (nice-to-have; see cut-line §16.1 if time runs out).
+
+**Demo KPIs (story, not a hard requirement):** ~3 minutes wall-clock; **minimal clicks** (e.g. mic → mic → export) to reinforce voice-first.
+
+### 4.5 Defensive UX (edge cases)
+
+| Situation | Target behavior |
+| --------- | ---------------- |
+| **Mic permission denied** | Prominent **text input** (textarea) with the **same** downstream pipeline; label explains “Voice blocked — type your lesson request.” |
+| **SLNG unavailable / slow / timeout** | Banner: *“Voice unavailable — type your request.”*; disable mic; keep orchestration path identical. |
+| **fal image (or video) fails** | Block stays in **failed** state with **Retry**; **do not** block rest of canvas or other media jobs. |
+| **Off-topic voice (“what’s the weather?”)** | Short **TTS or text** reply: scope is lesson content only; suggest phrases like *“add a quiz”* or *“make it shorter.”* |
+| **Stage Wi‑Fi** | Pre-seeded **fallback assets** for the hero demo topic (e.g. water cycle image/video URLs); optional “fast template” mode (see §15). |
+
+### 4.6 Live demo script (~90 seconds)
+
+Use this as the **rehearsed** spine; adjust timestamps to team pacing.
+
+| Time | Beat | What judges see / hear |
+| ---- | ---- | ------------------------ |
+| 0:00–0:10 | Hook | Home / workspace; opening line: teachers spend hours on materials → **90 seconds of voice**. |
+| 0:10–0:30 | Voice in | Speak lesson request; **transcript** streams or appears on stop. |
+| 0:30–1:00 | Magic | Canvas **progressive fill**: skeleton → text blocks → **image** → **video** (or placeholder + resolve). |
+| 1:00–1:20 | Edit | Voice: *“Add a group activity”* + *“make the image friendlier”* — visible delta on canvas. |
+| 1:20–1:30 | Close | **Export** (PDF or JSON); closing line: *“Editable. Multimedia. Voice-first. That’s the difference.”* |
+
+**Backup:** screen recording of the full path if live APIs fail mid-demo.
 
 ---
 
@@ -419,6 +467,13 @@ type StudentInteractionEvent = {
 
 This keeps lesson content stable while still allowing analytics such as “70% of students missed question 2” or “most students replayed the video twice.”
 
+### 7.10 Hackathon provider tuning (latency, fallbacks, prizes)
+
+- **Tavily:** prefer `max_results: 3` and shallow `search_depth` for speed; show **count** in UI (“3 references found”) even if the visible references block is cut for time (§15.1).
+- **fal:** use the official serverless client where applicable; lower **poll interval** for queued jobs; **pre-warm** with a tiny dummy request on app load to reduce first-call cold start. For stage demos, **pre-generate** hero-topic image/video URLs and **swap in silently** if live generation exceeds a budget (e.g. 15s). **Stretch:** chain image→short video, or a style LoRA for consistent “classroom poster” look — only after the baseline image path is reliable.
+- **Pioneer / GLiNER2:** extraction SHOULD visibly drive at least one block (e.g. **Key terms**) so judges see structured extraction; if integration exceeds ~45 minutes, fall back to LLM-only entity extraction and document the tradeoff (prize vs. ship).
+- **SLNG:** prefer **streaming** transcript UX when the API supports it; **TTS** for one clarifying question is high-impact but **cuttable** if time-constrained.
+
 ---
 
 ## 8. API & server design (Next.js)
@@ -438,7 +493,7 @@ This keeps lesson content stable while still allowing analytics such as “70% o
 Options:
 
 - **NDJSON** stream: one JSON object per line (`patch`, `log`, `error`).
-- **SSE:** event types for patches vs telemetry.
+- **SSE:** event types for patches vs telemetry; **concrete lesson-orchestration event names** are specified in §8.4.
 
 Either way, the client reducer applies patches to **canvas state**.
 
@@ -446,13 +501,36 @@ Either way, the client reducer applies patches to **canvas state**.
 
 If fal supports callbacks, a dedicated **unauthenticated → authenticated** path must verify signatures (provider-specific). Never expose raw webhook secrets to the client.
 
+### 8.4 Orchestrator streaming contract (SSE, hackathon target)
+
+For the **lesson creation workspace**, the server orchestrator SHOULD stream **discrete progress events** so the canvas can **progressively reveal** without a single long spinner. **SSE** (or semantically equivalent NDJSON) is preferred over “one JSON blob at the end.”
+
+**Recommended route:** `POST /api/lesson/orchestrate` (or equivalent) with `Content-Type: text/event-stream`.
+
+**Suggested event types** (names are stable contracts for the client reducer):
+
+| SSE `event`     | Payload (JSON `data`) | Purpose |
+| --------------- | --------------------- | -------- |
+| `planned`       | `{ intent: … }`       | Voice-to-intent / lesson brief validated. |
+| `researched`    | `{ references: … }`   | Tavily results available (may still run in parallel with schema). |
+| `schema`        | `{ entities: … }`     | GLiNER2 / Pioneer extraction merged. |
+| `canvas_init`   | `{ elements: … }`     | Skeleton canvas: blocks with placeholders, prompts, and **stable block ids**. |
+| `canvas_patch`  | `{ patch: … }`        | Optional incremental JSON Patch for late-arriving text tweaks. |
+| `media`         | `{ blockId, type, url?, status?, error? }` | Per-block fal completion or failure. |
+| `error`         | `{ code, message, recoverable? }` | User-visible or toast; client may fall back to typed flow. |
+| `done`          | `{}` or `{ lessonId }` | Run complete; client may trigger TTS summary. |
+
+**Orchestration note:** for **latency**, Tavily search and GLiNER2 extraction MAY run **in parallel** after `planned`; emit `researched` / `schema` as each completes (order not guaranteed—client should merge by event type, not assume sequence).
+
+**Voice edits (post-canvas):** a separate **`POST /api/canvas/update`** (non-streaming or short SSE) applies **JSON Patch** (§6.3) from a dedicated “canvas edit” prompt; keep orchestration paths distinct from initial generation.
+
 ---
 
 ## 9. Client architecture
 
 ### 9.1 Component boundaries (suggested)
 
-- **`VoiceSessionController`:** mic, SLNG connection, transcript state, speaking indicators.
+- **`VoiceSessionController` / `VoicePanel`:** mic, SLNG connection, transcript state, speaking indicators, status list, quick actions (§9.5).
 - **`CanvasWorkspace`:** layout, selection, drag-drop, inspector panel.
 - **`BlockRenderer`:** per-type renderers (`TextBlockEditor`, `MediaBlockPreview`, `QuizEditor`).
 - **`SourcesDrawer`:** citations grouped by node.
@@ -492,6 +570,97 @@ Student runtime components:
 - **`SourcePopover`**: shows short citations when factual claims need trust.
 
 Teacher edit components and student runtime components should share schema types but not UI state. This avoids leaking draft-only controls into the public lesson.
+
+### 9.5 UX & UI specification — Lesson Workspace (demo-critical)
+
+This subsection is the **authoritative visual + interaction spec** for the hackathon demo surface. It aligns the **spatial layout**, **motion design**, and **voice vs edit** routing described in §4.4–§4.6.
+
+#### 9.5.1 Information architecture
+
+| Surface | Role |
+| ------- | ---- |
+| **Home / dashboard** | Minimal for MVP: primary question *“What do you want to teach today?”*, **large mic**, optional template shortcuts; list of saved lessons can be stubbed. |
+| **Lesson workspace** | Single screen that carries the live demo: **voice panel** + **canvas** + top bar actions. |
+
+**Route naming:** `/studio/[lessonId]` (document default) and a thin alias such as `/workspace` (same UI) are both acceptable; pick one for links in the app and stick to it.
+
+#### 9.5.2 Layout (two-column)
+
+ASCII wire (widths are **targets**, not hard law):
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Canvas Teacher AI                            [Save]  [Export]    │
+├──────────────────────┬──────────────────────────────────────────┤
+│  VOICE PANEL         │  CANVAS (scroll)                           │
+│  ~380px fixed        │  flex-1                                    │
+│  · big mic           │  · stacked “cards” (blocks) top → bottom   │
+│  · transcript        │  · title, objectives, media, quiz, etc.    │
+│  · status list       │  · optional “References” strip at bottom   │
+│  · quick actions     │                                            │
+└──────────────────────┴──────────────────────────────────────────┘
+```
+
+- **Top bar:** product name (left), **Save** + **Export** (right); keep height compact (~56–64px).
+- **Voice column:** fixed width on desktop; on narrow viewports stack **voice above canvas** (voice remains first for thumb reach on mobile).
+
+#### 9.5.3 Visual language
+
+| Token | Target |
+| ----- | ------ |
+| **Page background** | Off-white / paper: `#FAFAF7` (classroom-friendly, low glare). |
+| **Accent** | One warm accent only (e.g. `#FF6B35`): **mic button**, recording ring, primary CTA highlights. Avoid multi-accent rainbow UI. |
+| **Surfaces** | Canvas blocks: **white** cards, `border-radius: 12px`, subtle shadow `0 1px 3px rgba(0,0,0,0.05)`, **16px** vertical gap between blocks. |
+| **Typography** | **Inter** or **DM Sans**; title **~28px** semibold/bold; block headers **~18px** semibold; body **~15px** regular; line-height comfortable for reading aloud. |
+| **Status** | Small colored dot + label; **in-progress** uses a slow pulse or spinner; **done** ✓; **failed** ✗ with retry affordance on the affected block. |
+
+#### 9.5.4 Voice panel — components & motion
+
+- **Microphone control:** large **~80px** circular button, accent fill; **tap to start / tap to stop**; **hold-to-talk** optional but recommended for deliberate demo pacing.
+- **Listening state:** gentle **pulse** animation (e.g. scale 1 → 1.05, opacity or ring) while recording; optional **waveform** visualization when feasible.
+- **Transcript:** stream partial tokens when SLNG supports streaming; otherwise show **full transcript on stop** with a typing-style reveal as polish.
+- **Status list (vertical):** e.g. Researching → Schema → Generating image → Generating video; mirrors SSE events from §8.4.
+- **Quick actions (chips):** `Add quiz`, `Shorter`, `Add activity`, `Regenerate image` — duplicate common voice commands for **booth fallback** when audio fails.
+
+#### 9.5.5 Canvas blocks — editing & regeneration
+
+- Each block is a **card** with an optional **hover / focus toolbar**: **Edit**, **Regenerate** (media), **Delete** (teacher-only; confirm if destructive).
+- **Text:** inline edit (contentEditable or textarea) with debounced save to client store.
+- **Image / video:** show **placeholder + shimmer skeleton** while `pending`; cross-fade or fade-in when `ready`; **Retry** on `failed` without blocking siblings.
+- **References:** compact block or footer strip with **up to 3** links + one-line snippet each (trust + demo clarity).
+
+#### 9.5.6 Progressive reveal (“demo magic”)
+
+Rules:
+
+1. After transcript submit, **never** show a blank canvas: immediately render **skeleton blocks** (titles + gray shimmer) sized like final cards.
+2. Fill **text** as soon as LLM output arrives; run **fal** jobs in parallel; attach URLs to blocks as `media` events arrive.
+3. Prefer **motion** (skeleton → content, fade-in) over hard pop-in.
+
+This behavior is **product-critical** and pairs directly with the SSE contract in §8.4.
+
+#### 9.5.7 Intent routing (same mic, two modes)
+
+**Single mic button** for both “create lesson” and “edit canvas.” Heuristic **v1**:
+
+- If **no canvas yet** (or empty draft) → transcript goes to **orchestrator** (`/api/lesson/orchestrate`).
+- If **canvas exists** with content → transcript goes to **canvas update** (`/api/canvas/update`) as an edit command.
+
+Ambiguity (short utterances) MAY be resolved with a lightweight classifier or LLM router; if unsure, prefer **edit** when canvas is non-empty and the utterance matches imperative patterns (“add”, “make”, “remove”, “shorter”).
+
+#### 9.5.8 Export & save (workspace top bar)
+
+- **Save:** persists to M0/M1 tier (§10.1); toast + optimistic UI.
+- **Export:** **PDF** is a strong demo closer (html2pdf / print-to-PDF); JSON export remains the reliable engineering fallback.
+
+### 9.6 Component file mapping (suggested)
+
+Aligns naming with implementation tasks:
+
+- `src/components/voice/VoicePanel.tsx` — mic, transcript, status, quick actions, waveform (optional).
+- `src/components/canvas/Canvas.tsx` — scrollable column of blocks + top bar integration.
+- `src/components/canvas/blocks/*` — `TextBlock`, `ImageBlock`, `VideoBlock`, `QuizBlock`, `ActivityBlock`, `ReferenceBlock`.
+- `src/lib/store.ts` (or similar) — Zustand (or equivalent) for canvas + run state driven by SSE.
 
 ---
 
@@ -550,6 +719,7 @@ Minimal target folder structure:
 src/
   app/
     studio/[lessonId]/page.tsx
+    workspace/page.tsx
     lesson/[lessonId]/page.tsx
     present/[lessonId]/page.tsx
     api/lessons/[lessonId]/route.ts
@@ -653,9 +823,40 @@ The system should avoid complex games in the first version. Simple interactions 
 
 This order de-risks the hackathon: **canvas + orchestration** first, **voice** last (most variable in booth conditions).
 
+### 14.1 Hackathon time-boxed build plan (~5 hours)
+
+Ordered so each step is **individually demoable**; if time runs out, the demo degrades gracefully (see §15.1).
+
+| Step | Time (guide) | Outcome |
+| ---- | ------------- | -------- |
+| **0 — Setup** | ~20 min | Next.js + Tailwind + env stubs (`SLNG_*`, `TAVILY_*`, `FAL_*`, `FASTINO_*`, LLM key); deps such as `uuid`, client store, optional SSE parser. |
+| **1 — Static canvas** | ~40 min | `Canvas` + block components + **mock** `LessonDocument` (water cycle) matching §9.5 layout and styling. |
+| **2 — Voice in** | ~45 min | `VoicePanel` + `MediaRecorder` → `POST /api/voice/transcribe` → SLNG; transcript UI. |
+| **3 — Orchestrator + SSE** | ~50 min | `POST /api/lesson/orchestrate` streams §8.4 events; client updates store; **parallel** Tavily + GLiNER2 after `planned`. |
+| **4 — fal media** | ~40 min | Image + optional video; placeholders + retries; pre-baked fallbacks for stage. |
+| **5 — GLiNER2** | ~30 min | Wired extraction feeding at least **Key terms** block; LLM fallback documented. |
+| **6 — Voice edit** | ~40 min | `POST /api/canvas/update` + JSON Patch; **pre-bake** 2–3 commands for the demo script (§4.6). |
+| **7 — Tavily polish** | ~20 min | References strip + voice-panel research line. |
+| **8 — PDF export** | ~20 min | html2pdf / print route — demo closer. |
+| **9 — Rehearsal** | ~25 min | Three full dry runs + backup screen recording. |
+
+**Note:** §14 numbered list above is the **de-risked engineering order** (student renderer early, voice later). §14.1 is the **time-boxed booth sprint**; teams may blend both.
+
 ---
 
 ## 15. Risks & mitigations
+
+### 15.1 Hackathon cut-line (drop order)
+
+When behind schedule, **drop in this order** (first dropped = lowest demo risk relative to effort):
+
+1. Visible **References** block on canvas (keep Tavily running **silently** to ground the LLM if already wired).
+2. **PDF export** → replace with “Saved!” toast + JSON download.
+3. **Arbitrary voice editing** → keep **quick-action chips** (§9.5.4) that fire the same patch paths.
+4. **Video generation** → placeholder + copy “generating in background”; rely on **image** for the visual win.
+5. **Pioneer / GLiNER2** → LLM-only extraction (lose structured-extraction prize angle; keep ship).
+
+**Never cut for the core story:** SLNG (or typed fallback), **fal image** (or credible pre-seeded asset), **canvas + progressive reveal**, and a **coherent orchestration narrative** (even if simplified).
 
 | Risk                                  | Mitigation                                                 |
 | ------------------------------------- | ---------------------------------------------------------- |
