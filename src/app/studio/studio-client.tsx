@@ -395,7 +395,7 @@ export function StudioClient({
   }, [router, savedLessonId]);
 
   return (
-    <div className="relative mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-5 p-3 sm:p-4">
+    <div className="relative mx-auto flex h-dvh min-h-0 w-full max-w-7xl flex-col gap-5 overflow-hidden p-3 sm:p-4">
       <div className="mask-[linear-gradient(to_bottom,black,transparent_88%)] pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.35_0.07_185/0.055)_1px,transparent_1px),linear-gradient(90deg,oklch(0.35_0.07_185/0.045)_1px,transparent_1px)] bg-size-[44px_44px]" />
       <div className="pointer-events-none absolute top-20 -left-8 -z-10 size-24 rounded-full border-18 border-[oklch(0.82_0.14_76/0.28)]" />
       <div className="pointer-events-none absolute top-7 -right-10 -z-10 size-36 rounded-full border-22 border-[oklch(0.82_0.12_201/0.24)]" />
@@ -540,8 +540,8 @@ export function StudioClient({
                 A cheerful trace of who made what.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-64 lg:h-[min(50vh,420px)]">
+            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+              <ScrollArea className="min-h-0 flex-1">
                 <div className="space-y-2 p-4">
                   {timeline.length === 0 ? (
                     <div className="rounded-2xl border border-primary/25 border-dashed bg-[linear-gradient(135deg,oklch(0.97_0.04_95/0.82),oklch(0.96_0.035_185/0.7))] p-4 text-sm">

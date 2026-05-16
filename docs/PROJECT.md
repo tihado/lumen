@@ -2,10 +2,12 @@
 
 **Repository:** `next-learning`  
 **Document type:** technical architecture & product spec (hackathon-oriented)  
-**Stack (current):** Next.js **16.2**, React **19.2**, TypeScript **5**, Tailwind **v4**, Biome via Ultracite, **pnpm**, Lefthook  
+**Stack (current):** Next.js **16.2**, React **19.2**, TypeScript **5**, Tailwind **v4**, Drizzle + PostgreSQL, Vercel AI SDK, Biome via Ultracite, **pnpm**, Lefthook  
 **App entry:** `src/app/` (App Router)
 
-This document is the **authoritative technical description** of the intended system. The codebase is still a scaffold; sections marked **Target** describe what to build, not what exists today.
+This document is the **authoritative technical description** of the intended system and current product direction. As of 2026-05-16, the codebase is a **provider-visible persisted demo MVP** rather than a scaffold: `/studio` can submit a lesson prompt, stream orchestration progress as NDJSON, render an editable canvas, persist generated lesson versions to PostgreSQL, and open student-facing lesson pages.
+
+Sections marked **Target** still describe planned behavior. Implementation status should be cross-checked against `docs/CURRENT.md`.
 
 ---
 
@@ -55,6 +57,7 @@ A voice-first AI web application that helps teachers create **editable multimedi
 | Pedagogy      | Learning objectives, key takeaways, pacing / segments          | Should map to stable IDs for reordering                     |
 | Narrative     | Rich text, callouts, vocabulary                                | Markdown or portable JSON; avoid vendor lock-in             |
 | Media         | Images, short video clips, diagrams                            | Store **provenance** (model, prompt hash, provider job id)  |
+| Audio         | Narration clips, TTS summaries                                 | Optional SLNG output; mirror to S3-compatible storage when configured |
 | Interactivity | Activities, quizzes (MCQ, short answer), “check understanding” | Separate **content** from **runtime** (how it is presented) |
 | Evidence      | References, quotes, “further reading”                          | Must retain **URLs + retrieved snippets** for trust         |
 
@@ -62,10 +65,12 @@ A voice-first AI web application that helps teachers create **editable multimedi
 
 | Provider                        | Capability               | Responsibility in this product                                                                         |
 | ------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **OpenAI**                      | Structured generation    | Lesson JSON planning, utility generation, generated runtime script, fallback-friendly orchestration     |
 | **SLNG**                        | STT, TTS, realtime voice | Primary **human interface**; low-latency feedback; partial transcripts for UI                          |
 | **Tavily**                      | Web-aware search         | Retrieve **fresh** supporting material; reduce model hallucination for factual subjects                |
 | **Pioneer (Fastino) / GLiNER2** | Structured extraction    | Turn unstructured text (teacher + search results) into **typed entities** aligned to the lesson schema |
 | **fal**                         | Generative media         | Produce **images/video** assets bound to specific canvas nodes                                         |
+| **S3-compatible storage**        | Durable media URLs       | Optional mirror for generated images, videos, and TTS audio so shared lessons do not depend on ephemeral provider URLs |
 
 ### 2.6 Product summary & pitch (hackathon)
 
@@ -195,6 +200,7 @@ flowchart TB
   end
 
   subgraph providers [External providers]
+    OA[OpenAI]
     SLNG[SLNG]
     TAV[Tavily]
     PION[Pioneer / GLiNER2]
@@ -202,6 +208,7 @@ flowchart TB
   end
 
   ST <-->|WebSocket or HTTP streaming| RH
+  ORC --> OA
   ORC --> SLNG
   ORC --> TAV
   ORC --> PION
@@ -217,10 +224,11 @@ flowchart TB
 
 **Rationale:** secrets and provider orchestration stay **server-side** (`Route Handlers`, server actions, or dedicated server modules). The browser holds **session UI state** and **references** to assets; it never holds provider API keys.
 
-### 5.2 Deployment view (default assumption)
+### 5.2 Deployment view (current default)
 
 - **Vercel** (or compatible) for Next.js hosting.
-- **Media:** fal-hosted URLs or your object storage with signed URLs—decide per asset lifetime requirements.
+- **Database:** PostgreSQL is required for the current persisted generation flow because `DATABASE_URL` is used by `getDb()`.
+- **Media:** fal-hosted URLs by default; optional S3-compatible object storage mirrors generated images, videos, and SLNG audio for stable `https` URLs.
 
 ### 5.3 Voice vs canvas coupling
 
@@ -321,7 +329,7 @@ Use a **hybrid** approach:
 
 Guardrails: **schema validation** after every model step; repair loop (single retry) on validation failure.
 
-### 7.2 Sequence: end-to-end generation (target)
+### 7.2 Sequence: end-to-end generation (current + target)
 
 ```mermaid
 sequenceDiagram
@@ -329,6 +337,7 @@ sequenceDiagram
   participant SL as SLNG
   participant C as Client
   participant S as Next server
+  participant OA as OpenAI
   participant TV as Tavily
   participant PI as Pioneer/GLiNER2
   participant FA as fal
@@ -336,13 +345,14 @@ sequenceDiagram
   T->>SL: speech
   SL-->>C: partial + final transcript
   C->>S: submit transcript + session context
-  S->>S: intent + lesson plan (LLM)
   S->>TV: search queries
   TV-->>S: ranked results + excerpts
   S->>PI: passages for extraction
   PI-->>S: entities / slots
+  S->>OA: structured lesson plan + runtime script
+  OA-->>S: validated JSON / generated script
   S->>S: merge + validate LessonDocument draft
-  S-->>C: stream canvas patches + citations
+  S-->>C: stream NDJSON events + lesson patches + citations
   S->>FA: media jobs per MediaBlock
   FA-->>S: job ids / URLs
   S-->>C: patch MediaBlock.provenance + asset url
@@ -489,9 +499,24 @@ This keeps lesson content stable while still allowing analytics such as “70% o
 
 **Rule:** no provider SDK imports in client components.
 
+Current implemented HTTP surfaces:
+
+| Method & path | Purpose |
+| ------------- | ------- |
+| `POST /api/generate` | NDJSON lesson generation stream; persists lesson/version/run records |
+| `POST /api/media` | Regenerate image or video media for a block |
+| `GET /api/audio`, `POST /api/audio` | SLNG TTS bytes or S3 redirect where available |
+| `POST /api/voice/transcribe` | Server-side SLNG STT endpoint |
+| `POST /api/openai` | Text, JSON, and code utility generation |
+| `GET /api/lessons` | Saved lesson list |
+| `GET /api/lessons/[lessonId]` | Persisted lesson and current version |
+| `POST /api/lessons/[lessonId]/regenerate` | Refreshed lesson JSON |
+
 ### 8.2 Streaming to the client
 
-Options:
+Current implementation uses an **NDJSON** stream from `POST /api/generate`: one JSON object per line. The studio parses `StreamEvent` objects including `run_started`, provider lifecycle events, `lesson_patch`, `lesson_snapshot`, `run_completed`, and `run_failed`.
+
+Target options remain:
 
 - **NDJSON** stream: one JSON object per line (`patch`, `log`, `error`).
 - **SSE:** event types for patches vs telemetry; **concrete lesson-orchestration event names** are specified in §8.4.
@@ -671,9 +696,9 @@ Aligns naming with implementation tasks:
 
 | Tier   | What                               | Why                          |
 | ------ | ---------------------------------- | ---------------------------- |
-| **M0** | `localStorage` / downloadable JSON | Fast demo, no backend        |
-| **M1** | Postgres + blob storage            | Multi-device, shareable link |
-| **M2** | Version history per lesson         | Real product                 |
+| **M0** | `localStorage` / downloadable JSON | Fast demo, no backend; currently **not** the implemented generation path |
+| **M1** | Postgres + optional S3-compatible blob storage | Current persisted generation path; multi-device, shareable link |
+| **M2** | Version history per lesson         | Partially present through `lesson_versions`; still needs richer UI and edit history |
 
 ### 10.2 Export formats (target)
 
@@ -712,7 +737,7 @@ There are two implementation options.
 | **Dynamic website**          | `/lesson/[lessonId]` fetches `LessonDocument` at request time.        | Hackathon MVP; fastest to build.            |
 | **Static published website** | Publish step snapshots the document into a versioned static artifact. | Stable sharing; fewer runtime dependencies. |
 
-Recommended hackathon path: **dynamic website first**. Static publishing can be added later as an optimization.
+Current path: generated lessons are persisted as versioned lesson records and rendered through `/lesson/[lessonId]`, with sandboxed HTML for generated artifacts and structured React rendering for fixtures/fallbacks. Dynamic structured rendering and static/sandboxed publishing remain architectural options to consolidate later.
 
 Minimal target folder structure:
 
@@ -876,20 +901,18 @@ When behind schedule, **drop in this order** (first dropped = lowest demo risk r
 
 ---
 
-## 17. Repository layout (current vs target)
+## 17. Repository layout (current)
 
-**Current (scaffold):**
-
-- `src/app/layout.tsx`, `src/app/page.tsx` — starter UI
-- `next.config.ts` — minimal
-- `package.json` — core deps only
-
-**Target (incremental):**
-
-- `src/app/api/**` — Route Handlers
-- `src/lib/lesson/**` — schema, patches, reducers
-- `src/lib/orchestrator/**` — provider adapters + run state machine
-- `src/components/canvas/**`, `src/components/voice/**`
+- `src/app/api/**` — Route Handlers for generation, media, audio, voice, OpenAI utilities, and lessons.
+- `src/app/studio/` — teacher workspace for prompt input, NDJSON consumption, provider timeline, canvas, save/share flow.
+- `src/app/lessons/` and `src/app/lesson/[lessonId]/` — saved lesson browsing and student-facing lesson pages.
+- `src/components/**` — UI, canvas, voice, and lesson runtime components.
+- `src/db/**` — Drizzle schema and database client for `lessons`, `lesson_versions`, and `generation_runs`.
+- `src/lib/lesson/**` — canonical schema, patches, repository, studio state, HTML artifact helpers.
+- `src/lib/orchestrator/**` — `generate-lesson` stream and provider adapters for OpenAI, Tavily, Pioneer, fal, and SLNG.
+- `src/lib/media/**` — optional S3-compatible media mirroring.
+- `docs/**` — project spec, current state, and delivery plan.
+- `imgs/**` — README screenshots, logo, and architecture diagram.
 
 ---
 
@@ -934,7 +957,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | ----------------- | ------------------------------------ |
 | `AGENTS.md`       | Agent rules (Next.js version caveat) |
 | `CLAUDE.md`       | Points to `@AGENTS.md`               |
-| `README.md`       | Default create-next-app readme       |
+| `README.md`       | User-facing product, setup, API, and architecture overview |
 | `docs/PROJECT.md` | This technical specification         |
 
 ---

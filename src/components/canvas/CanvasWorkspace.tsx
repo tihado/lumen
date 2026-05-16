@@ -41,9 +41,9 @@ export function CanvasWorkspace({
           Lesson id: <code className="rounded bg-muted px-1">{doc.id}</code>
         </p>
       </CardHeader>
-      <CardContent className="min-h-0 flex-1 p-0">
-        <ScrollArea className="h-[min(70vh,640px)]">
-          <div className="space-y-4 bg-[radial-gradient(circle_at_20%_18%,oklch(0.9_0.1_73/0.26),transparent_22%),radial-gradient(circle_at_82%_35%,oklch(0.88_0.1_190/0.2),transparent_24%),linear-gradient(oklch(0.42_0.05_180/0.04)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.035)_1px,transparent_1px)] bg-[size:auto,auto,32px_32px,32px_32px] p-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="min-h-full space-y-4 bg-[radial-gradient(circle_at_20%_18%,oklch(0.9_0.1_73/0.26),transparent_22%),radial-gradient(circle_at_82%_35%,oklch(0.88_0.1_190/0.2),transparent_24%),linear-gradient(oklch(0.42_0.05_180/0.04)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.035)_1px,transparent_1px)] bg-[size:auto,auto,32px_32px,32px_32px] p-4">
             {childIds.map((id) => (
               <BlockRenderer
                 doc={doc}
