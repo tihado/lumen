@@ -336,7 +336,7 @@ function scriptForHtml(value: string) {
   return value.replace(/<\/script/gi, "<\\/script");
 }
 
-export function isSolarSystemPrompt(prompt: string) {
+function isSolarSystemPrompt(prompt: string) {
   const lower = prompt.toLowerCase();
   return lower.includes("solar system");
 }
@@ -420,6 +420,9 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
     .hint { pointer-events: none; color: #e6f2ff; background: rgba(7, 13, 28, .72); border: 1px solid rgba(168, 184, 214, .22); border-radius: 999px; padding: 9px 13px; font-size: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter: blur(12px); }
     button { border: 1px solid rgba(255, 255, 255, .16); border-radius: 6px; background: linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .045)); color: var(--ink); padding: 10px 13px; font: inherit; font-size: 13px; font-weight: 760; cursor: pointer; transition: transform .18s ease, border-color .18s ease, background .18s ease, color .18s ease; }
     button:hover, button.active { border-color: rgba(255, 209, 102, .86); color: #fff6d8; background: linear-gradient(180deg, rgba(255, 209, 102, .2), rgba(103, 232, 249, .08)); transform: translateY(-1px); }
+    .toolbar-actions { display: flex; flex-wrap: wrap; gap: 9px; pointer-events: auto; }
+    .voice-toggle { min-width: 104px; border-color: rgba(103, 232, 249, .3); pointer-events: auto; }
+    .voice-toggle[aria-pressed="true"] { border-color: rgba(103, 232, 249, .86); color: #ecfeff; background: linear-gradient(180deg, rgba(103, 232, 249, .24), rgba(255, 209, 102, .08)); }
     .reset { pointer-events: auto; min-width: 104px; }
     aside { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: linear-gradient(180deg, rgba(10, 20, 42, .84), rgba(5, 10, 23, .78)); padding: 26px; min-height: 420px; box-shadow: 0 24px 80px rgba(0, 0, 0, .36), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(18px); }
     aside::before { content: ""; position: absolute; top: -90px; right: -120px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgba(103, 232, 249, .18), transparent 62%); pointer-events: none; }
@@ -474,7 +477,10 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
         <canvas id="solar-canvas" aria-label="3D solar system simulation"></canvas>
         <div class="toolbar">
           <span class="hint">Drag to rotate · Scroll to zoom · Click the Sun or a planet</span>
-          <button class="reset" id="reset-view" type="button">Overview</button>
+          <div class="toolbar-actions">
+            <button class="voice-toggle" id="solar-audio-toggle" type="button" aria-pressed="false">Voice off</button>
+            <button class="reset" id="reset-view" type="button">Overview</button>
+          </div>
         </div>
       </div>
       <aside>

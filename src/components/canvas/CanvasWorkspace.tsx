@@ -27,7 +27,7 @@ export function CanvasWorkspace({
   const childIds = root?.type === "section" ? root.children : [];
 
   return (
-    <Card className="min-h-0 flex-1 overflow-hidden border-white/80 bg-white/78 shadow-[0_22px_70px_oklch(0.47_0.09_180/0.13)]">
+    <Card className="min-h-0 flex-1 overflow-hidden border-white/80 bg-white/78 py-0 shadow-[0_22px_70px_oklch(0.47_0.09_180/0.13)]">
       <CardHeader className="border-white/70 border-b bg-[linear-gradient(135deg,white,oklch(0.965_0.04_165/0.72))] py-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <span className="flex size-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -43,7 +43,7 @@ export function CanvasWorkspace({
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         <ScrollArea className="min-h-0 flex-1">
-          <div className="min-h-full space-y-4 bg-[radial-gradient(circle_at_20%_18%,oklch(0.9_0.1_73/0.26),transparent_22%),radial-gradient(circle_at_82%_35%,oklch(0.88_0.1_190/0.2),transparent_24%),linear-gradient(oklch(0.42_0.05_180/0.04)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.035)_1px,transparent_1px)] bg-[size:auto,auto,32px_32px,32px_32px] p-4">
+          <div className="min-h-full space-y-4 bg-[radial-gradient(circle_at_20%_18%,oklch(0.9_0.1_73/0.26),transparent_22%),radial-gradient(circle_at_82%_35%,oklch(0.88_0.1_190/0.2),transparent_24%),linear-gradient(oklch(0.42_0.05_180/0.04)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.035)_1px,transparent_1px)] bg-size-[auto,auto,32px_32px,32px_32px] p-4 pb-8">
             {childIds.map((id) => (
               <BlockRenderer
                 doc={doc}

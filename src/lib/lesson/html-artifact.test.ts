@@ -151,6 +151,8 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).toContain("Click the Sun or a planet");
     expect(artifact.html).toContain("data-solar-quiz");
     expect(artifact.html).toContain("Test your orbit instincts");
+    expect(artifact.html).toContain('id="solar-audio-toggle"');
+    expect(artifact.html).toContain("Voice off");
     expect(artifact.html).not.toContain("Answer: <span");
     expect(artifact.html).toContain("Earth");
     expect(artifact.html).toContain("What is gravity?");
