@@ -9,7 +9,6 @@
   <img src="imgs/class.png" alt="Lumen studio and lesson canvas" width="580">
 </p>
 
-
 ---
 
 ## Hackathon sponsors & API credits
@@ -18,13 +17,13 @@ These partners power the hackathon stack.
 
 ### Sponsors used in this codebase
 
-| Sponsor | Role in Lumen | Code / configuration |
-| -------- | ------------- | --------------------- |
-| [**OpenAI**](https://openai.com) | Frontier models — structured lesson JSON, utilities via AI SDK (`@ai-sdk/openai`), `/api/openai` | `OPENAI_API_KEY`, optional `OPENAI_MODEL`, `OPENAI_CODE_MODEL` |
-| [**Tavily**](https://www.tavily.com/) | Real-time search and excerpts for grounded lesson content | `TAVILY_API_KEY` → `src/lib/orchestrator/providers/tavily.ts` |
-| [**Pioneer**](https://pioneer.ai/) by [**Fastino**](https://fastino.ai/) | Entity / schema extraction (`POST …/inference`) | `PIONEER_API_URL`, `PIONEER_API_KEY`, optional `PIONEER_MODEL_ID` → `src/lib/orchestrator/providers/pioneer.ts` |
-| [**fal**](https://fal.ai/) | Generative **images** and **videos** for lesson media | `FAL_KEY` or `FAL_API_KEY`, optional `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` → `src/lib/orchestrator/providers/fal.ts` |
-| [**SLNG**](https://slng.ai/) | Global voice infrastructure — **STT** + **TTS** on the server | `SLNG_API_KEY` + `SLNG_API_BASE_URL`, optional `SLNG_STT_MODEL`, `SLNG_TTS_MODEL` → `src/lib/orchestrator/providers/slng.ts` |
+| Sponsor                                                                  | Role in Lumen                                                                                    | Code / configuration                                                                                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| [**OpenAI**](https://openai.com)                                         | Frontier models — structured lesson JSON, utilities via AI SDK (`@ai-sdk/openai`), `/api/openai` | `OPENAI_API_KEY`, optional `OPENAI_MODEL`, `OPENAI_CODE_MODEL`                                                               |
+| [**Tavily**](https://www.tavily.com/)                                    | Real-time search and excerpts for grounded lesson content                                        | `TAVILY_API_KEY` → `src/lib/orchestrator/providers/tavily.ts`                                                                |
+| [**Pioneer**](https://pioneer.ai/) by [**Fastino**](https://fastino.ai/) | Entity / schema extraction (`POST …/inference`)                                                  | `PIONEER_API_URL`, `PIONEER_API_KEY`, optional `PIONEER_MODEL_ID` → `src/lib/orchestrator/providers/pioneer.ts`              |
+| [**fal**](https://fal.ai/)                                               | Generative **images** and **videos** for lesson media                                            | `FAL_KEY` or `FAL_API_KEY`, optional `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` → `src/lib/orchestrator/providers/fal.ts`          |
+| [**SLNG**](https://slng.ai/)                                             | Global voice infrastructure — **STT** + **TTS** on the server                                    | `SLNG_API_KEY` + `SLNG_API_BASE_URL`, optional `SLNG_STT_MODEL`, `SLNG_TTS_MODEL` → `src/lib/orchestrator/providers/slng.ts` |
 
 **Optional (not a “sponsor” API, but used in repo):** **AWS S3**-compatible storage for durable media URLs — `S3_*` / `AWS_*` env vars in [`src/lib/env.ts`](./src/lib/env.ts).
 
@@ -38,12 +37,12 @@ These partners power the hackathon stack.
 
 ### Next.js App Router
 
-| Piece | Responsibility |
-| ----- | ---------------- |
-| **`src/app/studio/`** | Teacher workspace: transcript, NDJSON consumer, canvas, save/publish flow |
-| **`src/app/api/*/route.ts`** | **Route Handlers** — no provider secrets in the browser |
+| Piece                                         | Responsibility                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`src/app/studio/`**                         | Teacher workspace: transcript, NDJSON consumer, canvas, save/publish flow                                                                                                                                                                                                                                                                      |
+| **`src/app/api/*/route.ts`**                  | **Route Handlers** — no provider secrets in the browser                                                                                                                                                                                                                                                                                        |
 | **`src/lib/orchestrator/generate-lesson.ts`** | Ordered stages: SLNG intake hint → Tavily (2 queries) + citations → Pioneer extract → OpenAI `generateLessonPlan` → patch loop (`lesson_patch` / `lesson_snapshot` over NDJSON) → **fal** `Promise.all` media + S3 mirror → SLNG TTS + S3 → OpenAI `generateLessonRuntimeScript` → sandboxed HTML + `saveLessonVersion`; yields `StreamEvent`s |
-| **`src/db/`** | **Drizzle** + **postgres** — `lessons`, `lesson_versions`, `generation_runs` |
+| **`src/db/`**                                 | **Drizzle** + **postgres** — `lessons`, `lesson_versions`, `generation_runs`                                                                                                                                                                                                                                                                   |
 
 When **S3** env vars are set, generated **fal** assets and **SLNG** audio can be mirrored for stable `https` URLs (see `src/lib/media/s3-storage.ts`).
 
@@ -57,28 +56,28 @@ Vector diagram **`imgs/architecture.svg`** matches this file; zoom stays crisp o
 
 ## Key features
 
-| Feature | Description |
-| ------- | ----------- |
-| **Voice & transcript** | Browser capture + **`/api/voice/transcribe`** (SLNG); typed fallback always available |
-| **Live provider timeline** | See Tavily, Pioneer, OpenAI, fal, SLNG steps complete with **live vs fallback** badges |
-| **Editable canvas** | Patch-driven lesson document; regenerate media per block where supported |
-| **Persisted lessons** | Save drafts and browse history under **`/lessons`** |
-| **Deterministic fallbacks** | Run without external keys for UI demos (quality limited) |
-| **Optional S3 mirror** | Longer-lived URLs for images, video, and TTS audio |
+| Feature                     | Description                                                                            |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| **Voice & transcript**      | Browser capture + **`/api/voice/transcribe`** (SLNG); typed fallback always available  |
+| **Live provider timeline**  | See Tavily, Pioneer, OpenAI, fal, SLNG steps complete with **live vs fallback** badges |
+| **Editable canvas**         | Patch-driven lesson document; regenerate media per block where supported               |
+| **Persisted lessons**       | Save drafts and browse history under **`/lessons`**                                    |
+| **Deterministic fallbacks** | Run without external keys for UI demos (quality limited)                               |
+| **Optional S3 mirror**      | Longer-lived URLs for images, video, and TTS audio                                     |
 
 ---
 
 ## Tech stack
 
-| Layer | Technology |
-| ----- | ---------- |
-| **Framework** | [Next.js](https://nextjs.org/) **16.2** (App Router), **Turbopack** dev |
-| **UI** | [React](https://react.dev/) **19.2**, [Tailwind CSS](https://tailwindcss.com/) **v4**, [`@base-ui/react`](https://base-ui.com/react/overview/quick-start) |
-| **Language** | [TypeScript](https://www.typescriptlang.org/) **5.9** |
-| **AI** | [Vercel AI SDK](https://sdk.vercel.ai/docs) — `ai`, `@ai-sdk/react`, `@ai-sdk/openai`, `@ai-sdk/fal` |
-| **Data** | [Drizzle ORM](https://orm.drizzle.team/) + [`postgres`](https://github.com/porsager/postgres) |
-| **Validation** | [Zod](https://zod.dev/) **4.x** |
-| **Tooling** | [pnpm](https://pnpm.io/) **11.x**, [Biome](https://biomejs.dev/) via [Ultracite](https://github.com/haydenbleasel/ultracite), [Vitest](https://vitest.dev/), [Lefthook](https://github.com/evilmartians/lefthook) |
+| Layer          | Technology                                                                                                                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Framework**  | [Next.js](https://nextjs.org/) **16.2** (App Router), **Turbopack** dev                                                                                                                                           |
+| **UI**         | [React](https://react.dev/) **19.2**, [Tailwind CSS](https://tailwindcss.com/) **v4**, [`@base-ui/react`](https://base-ui.com/react/overview/quick-start)                                                         |
+| **Language**   | [TypeScript](https://www.typescriptlang.org/) **5.9**                                                                                                                                                             |
+| **AI**         | [Vercel AI SDK](https://sdk.vercel.ai/docs) — `ai`, `@ai-sdk/react`, `@ai-sdk/openai`, `@ai-sdk/fal`                                                                                                              |
+| **Data**       | [Drizzle ORM](https://orm.drizzle.team/) + [`postgres`](https://github.com/porsager/postgres)                                                                                                                     |
+| **Validation** | [Zod](https://zod.dev/) **4.x**                                                                                                                                                                                   |
+| **Tooling**    | [pnpm](https://pnpm.io/) **11.x**, [Biome](https://biomejs.dev/) via [Ultracite](https://github.com/haydenbleasel/ultracite), [Vitest](https://vitest.dev/), [Lefthook](https://github.com/evilmartians/lefthook) |
 
 > **Heads-up:** This project uses a **non-standard Next.js** line. Read `node_modules/next/dist/docs/` and [`AGENTS.md`](./AGENTS.md) before relying on framework behavior from memory.
 
@@ -108,23 +107,23 @@ Vector diagram **`imgs/architecture.svg`** matches this file; zoom stays crisp o
 1. **Clone & install**
 
    ```bash
-   git clone https://github.com/tihado/next-learn.git
-   cd next-learn
+   git clone https://github.com/tihado/lumen.git
+   cd lumen
    corepack enable
    pnpm install
    ```
 
 2. **Environment** — create **`.env.local`** in the project root:
 
-   | Variable | When needed |
-   | -------- | ----------- |
-   | `DATABASE_URL` | **Required** for DB-backed flows (`getDb()` throws if missing) |
-   | `OPENAI_API_KEY` | Live structured lesson generation |
-   | `TAVILY_API_KEY` | Live web search excerpts |
-   | `PIONEER_API_URL` + `PIONEER_API_KEY` | Live entity extraction (`PIONEER_MODEL_ID` optional) |
-   | `FAL_KEY` or `FAL_API_KEY` | Live image/video |
-   | `SLNG_API_KEY` + `SLNG_API_BASE_URL` | Live STT/TTS |
-   | `S3_*`, `AWS_*` | Optional media mirroring |
+   | Variable                              | When needed                                                    |
+   | ------------------------------------- | -------------------------------------------------------------- |
+   | `DATABASE_URL`                        | **Required** for DB-backed flows (`getDb()` throws if missing) |
+   | `OPENAI_API_KEY`                      | Live structured lesson generation                              |
+   | `TAVILY_API_KEY`                      | Live web search excerpts                                       |
+   | `PIONEER_API_URL` + `PIONEER_API_KEY` | Live entity extraction (`PIONEER_MODEL_ID` optional)           |
+   | `FAL_KEY` or `FAL_API_KEY`            | Live image/video                                               |
+   | `SLNG_API_KEY` + `SLNG_API_BASE_URL`  | Live STT/TTS                                                   |
+   | `S3_*`, `AWS_*`                       | Optional media mirroring                                       |
 
    Full list and semantics: [`src/lib/env.ts`](./src/lib/env.ts).
 
@@ -152,17 +151,17 @@ Vector diagram **`imgs/architecture.svg`** matches this file; zoom stays crisp o
 
 ## HTTP API reference
 
-| Method & path | Body / query | Response |
-| ------------- | ------------ | -------- |
-| `POST /api/generate` | `{ transcript, lessonId? }` | **NDJSON** stream (`maxDuration` 120s) |
-| `POST /api/media` | `{ prompt, modality?: "image"\|"video" }` | JSON `{ asset, usedFallback, … }` |
-| `GET /api/audio?text=` | query `text` | SLNG TTS bytes or redirect to S3 |
-| `POST /api/audio` | `{ text }` | SLNG TTS bytes |
-| `POST /api/voice/transcribe` | `multipart/form-data` field `audio` | JSON transcript |
-| `POST /api/openai` | `{ mode: "text"\|"json"\|"code", prompt }` | Generated payload |
-| `GET /api/lessons` | — | `{ lessons: [...] }` |
-| `GET /api/lessons/[lessonId]` | — | Lesson + current version |
-| `POST /api/lessons/[lessonId]/regenerate` | optional `{ prompt }` | Refreshed lesson JSON |
+| Method & path                             | Body / query                               | Response                               |
+| ----------------------------------------- | ------------------------------------------ | -------------------------------------- |
+| `POST /api/generate`                      | `{ transcript, lessonId? }`                | **NDJSON** stream (`maxDuration` 120s) |
+| `POST /api/media`                         | `{ prompt, modality?: "image"\|"video" }`  | JSON `{ asset, usedFallback, … }`      |
+| `GET /api/audio?text=`                    | query `text`                               | SLNG TTS bytes or redirect to S3       |
+| `POST /api/audio`                         | `{ text }`                                 | SLNG TTS bytes                         |
+| `POST /api/voice/transcribe`              | `multipart/form-data` field `audio`        | JSON transcript                        |
+| `POST /api/openai`                        | `{ mode: "text"\|"json"\|"code", prompt }` | Generated payload                      |
+| `GET /api/lessons`                        | —                                          | `{ lessons: [...] }`                   |
+| `GET /api/lessons/[lessonId]`             | —                                          | Lesson + current version               |
+| `POST /api/lessons/[lessonId]/regenerate` | optional `{ prompt }`                      | Refreshed lesson JSON                  |
 
 Implementation: `src/app/api/**/route.ts`.
 
@@ -170,24 +169,24 @@ Implementation: `src/app/api/**/route.ts`.
 
 ## Scripts
 
-| Command | Description |
-| ------- | ----------- |
-| `pnpm dev` | Development server |
-| `pnpm build` / `pnpm start` | Production build & serve |
-| `pnpm test` | Vitest (`src/**/*.test.ts`) |
-| `pnpm run format` | Ultracite (Biome) |
-| `pnpm run db:generate` / `pnpm run db:migrate` | Drizzle migrations |
+| Command                                        | Description                 |
+| ---------------------------------------------- | --------------------------- |
+| `pnpm dev`                                     | Development server          |
+| `pnpm build` / `pnpm start`                    | Production build & serve    |
+| `pnpm test`                                    | Vitest (`src/**/*.test.ts`) |
+| `pnpm run format`                              | Ultracite (Biome)           |
+| `pnpm run db:generate` / `pnpm run db:migrate` | Drizzle migrations          |
 
 ---
 
 ## Documentation
 
-| Document | Description |
-| -------- | ----------- |
-| [`docs/PROJECT.md`](./docs/PROJECT.md) | Full product & technical specification |
-| [`docs/CURRENT.md`](./docs/CURRENT.md) | Current progress notes |
-| [`docs/PLAN.md`](./docs/PLAN.md) | Delivery / hackathon plan |
-| [`AGENTS.md`](./AGENTS.md) | Next.js version caveat for agents & contributors |
+| Document                               | Description                                      |
+| -------------------------------------- | ------------------------------------------------ |
+| [`docs/PROJECT.md`](./docs/PROJECT.md) | Full product & technical specification           |
+| [`docs/CURRENT.md`](./docs/CURRENT.md) | Current progress notes                           |
+| [`docs/PLAN.md`](./docs/PLAN.md)       | Delivery / hackathon plan                        |
+| [`AGENTS.md`](./AGENTS.md)             | Next.js version caveat for agents & contributors |
 
 ---
 
@@ -228,20 +227,14 @@ Path alias: `@/*` → `./src/*` ([`tsconfig.json`](./tsconfig.json)).
 
 Everyone below is from **`git shortlog -sne --all`** (counts include all branches). GitHub links use the **git author name** as `@handle`, except where we can infer from `users.noreply.github.com`—if yours is wrong, send a PR to fix it.
 
-| # | Author (git) | Commits | GitHub |
-|---|----------------|--------:|--------|
-| 1 | **nvti** | 16 | [@nvti](https://github.com/nvti) |
-| 2 | **NLag** | 9 | [@NLag](https://github.com/NLag) |
-| 3 | **honghanhh** | 5 | [@honghanhh](https://github.com/honghanhh) |
-| 4 | **lanwyb** | 3 | [@lanwyb](https://github.com/lanwyb) |
+| #   | Author (git)  | GitHub                                     |
+| --- | ------------- | ------------------------------------------ |
+| 1   | **nvti**      | [@nvti](https://github.com/nvti)           |
+| 2   | **NLag**      | [@NLag](https://github.com/NLag)           |
+| 3   | **honghanhh** | [@honghanhh](https://github.com/honghanhh) |
+| 4   | **lanwyb**    | [@lanwyb](https://github.com/lanwyb)       |
 
-Refresh locally:
-
-```bash
-git shortlog -sne --all
-```
-
-Upstream repo: [tihado/next-learn](https://github.com/tihado/next-learn).
+Upstream repo: [tihado/lumen](https://github.com/tihado/lumen).
 
 ---
 
