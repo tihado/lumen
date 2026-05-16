@@ -29,6 +29,7 @@ import {
   fallbackLessonRuntimeScript,
   generateLessonPlan,
   generateLessonRuntimeScript,
+  type LessonPlan,
 } from "./providers/llm";
 import {
   type ExtractedEntity,
@@ -79,6 +80,66 @@ function citationsFromTavily(
       provider: "tavily" as const,
       nodeIds: i === 0 ? [nodeHint] : undefined,
     }));
+}
+
+type PlannedMediaAsset = LessonPlan["mediaPlan"]["assets"][number] & {
+  nodeId: string;
+  parentId: string;
+};
+
+function plannedMediaAssets(
+  plan: LessonPlan,
+  sectionIds: {
+    hook: string;
+    explain: string;
+    example: string;
+    practice: string;
+  }
+): PlannedMediaAsset[] {
+  const assets = [...plan.mediaPlan.assets];
+
+  if (!assets.some((asset) => asset.modality === "image")) {
+    assets.unshift({
+      placement: "hook",
+      modality: "image",
+      title: "Opening anchor visual",
+      prompt: plan.mediaPlan.imagePrompt,
+      alt: plan.mediaPlan.imageAlt,
+      teachingPurpose: "Give students a concrete anchor for the lesson.",
+    });
+  }
+
+  if (!assets.some((asset) => asset.modality === "video")) {
+    assets.push({
+      placement: "explain",
+      modality: "video",
+      title: "Process motion",
+      prompt: plan.mediaPlan.videoPrompt,
+      alt: plan.mediaPlan.videoAlt,
+      teachingPurpose:
+        "Show motion, sequence, or cause and effect for the main concept.",
+    });
+  }
+
+  let imageCount = 0;
+  let videoCount = 0;
+
+  return assets.slice(0, 4).map((asset) => {
+    const nodeId =
+      asset.modality === "image"
+        ? imageCount++ === 0
+          ? "media-cover"
+          : `media-image-${imageCount}`
+        : videoCount++ === 0
+          ? "media-video"
+          : `media-video-${videoCount}`;
+
+    return {
+      ...asset,
+      nodeId,
+      parentId: sectionIds[asset.placement],
+    };
+  });
 }
 
 export async function* generateLessonStream(input: {
@@ -290,12 +351,20 @@ export async function* generateLessonStream(input: {
     const objId = "obj-main";
     const secHook = "sec-hook";
     const secExplain = "sec-explain";
+    const secVocab = "sec-vocab";
+    const secScript = "sec-script";
+    const secExample = "sec-example";
     const secPractice = "sec-practice";
+    const secTeacherTips = "sec-teacher-tips";
     const quizId = "quiz-main";
     const reflId = "refl-main";
-    const mediaId = "media-cover";
-    const videoId = "media-video";
     const audioId = "media-audio";
+    const mediaAssets = plannedMediaAssets(lessonPlan, {
+      hook: secHook,
+      explain: secExplain,
+      example: secExample,
+      practice: secPractice,
+    });
 
     const patches: LessonPatchOp[] = [
       {
@@ -338,26 +407,51 @@ export async function* generateLessonStream(input: {
       },
       {
         op: "add_node",
-        parentId: secHook,
+        parentId: "root",
         node: {
-          id: mediaId,
-          type: "media",
-          title: "Cover visual",
-          modality: "image",
-          alt: `Illustration related to ${topic}`,
-          status: "pending",
+          id: secScript,
+          type: "section",
+          title: "Lecture script",
+          children: [],
         },
       },
       {
         op: "add_node",
-        parentId: secHook,
+        parentId: secScript,
         node: {
-          id: videoId,
-          type: "media",
-          title: "Motion preview",
-          modality: "video",
-          alt: `Short classroom-safe video related to ${topic}`,
-          status: "pending",
+          id: "txt-lecture-script",
+          type: "text",
+          title: "Teacher talk track and student actions",
+          format: "markdown",
+          body: lessonPlan.lectureScript
+            .map(
+              (item, index) =>
+                `### ${index + 1}. ${item.title}\n**Teacher says:** ${item.teacherNarration}\n\n**Students do:** ${item.studentAction}`
+            )
+            .join("\n\n"),
+        },
+      },
+      {
+        op: "add_node",
+        parentId: "root",
+        node: {
+          id: secVocab,
+          type: "section",
+          title: "Key vocabulary",
+          children: [],
+        },
+      },
+      {
+        op: "add_node",
+        parentId: secVocab,
+        node: {
+          id: "txt-vocab",
+          type: "text",
+          title: "Terms students will use",
+          format: "markdown",
+          body: lessonPlan.keyVocabulary
+            .map((item) => `- **${item.term}:** ${item.definition}`)
+            .join("\n"),
         },
       },
       {
@@ -370,14 +464,38 @@ export async function* generateLessonStream(input: {
           children: [],
         },
       },
+      ...lessonPlan.explanationSections.map(
+        (section, index): LessonPatchOp => ({
+          op: "add_node",
+          parentId: secExplain,
+          node: {
+            id: `txt-explain-${index + 1}`,
+            type: "text",
+            title: section.title,
+            format: "markdown",
+            body: section.body,
+          },
+        })
+      ),
       {
         op: "add_node",
-        parentId: secExplain,
+        parentId: "root",
         node: {
-          id: "txt-e1",
+          id: secExample,
+          type: "section",
+          title: "Worked example",
+          children: [],
+        },
+      },
+      {
+        op: "add_node",
+        parentId: secExample,
+        node: {
+          id: "txt-worked-example",
           type: "text",
+          title: lessonPlan.workedExample.title,
           format: "markdown",
-          body: lessonPlan.explanationBody,
+          body: lessonPlan.workedExample.body,
         },
       },
       {
@@ -422,20 +540,42 @@ export async function* generateLessonStream(input: {
             { id: "c2", label: lessonPlan.activity.weakFitLabel },
           ],
           items: [
-            {
-              id: "a1",
-              label: lessonPlan.activity.strongItems[0],
+            ...lessonPlan.activity.strongItems.map((label, index) => ({
+              id: `a-strong-${index + 1}`,
+              label,
               categoryId: "c1",
-            },
-            { id: "a2", label: lessonPlan.activity.weakItem, categoryId: "c2" },
-            {
-              id: "a3",
-              label: lessonPlan.activity.strongItems[1],
-              categoryId: "c1",
-            },
+            })),
+            ...lessonPlan.activity.weakItems.map((label, index) => ({
+              id: `a-weak-${index + 1}`,
+              label,
+              categoryId: "c2",
+            })),
           ],
         },
       },
+      ...mediaAssets.map(
+        (asset): LessonPatchOp => ({
+          op: "add_node",
+          parentId: asset.parentId,
+          node: {
+            id: asset.nodeId,
+            type: "media",
+            title: asset.title,
+            modality: asset.modality,
+            alt: asset.alt,
+            status: "pending",
+            provenance: {
+              provider: "fal",
+              model:
+                asset.modality === "image"
+                  ? (input.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell")
+                  : (input.env.FAL_VIDEO_MODEL ?? "fal-ai/veo3.1/fast"),
+              prompt: asset.prompt,
+              createdAt: new Date().toISOString(),
+            },
+          },
+        })
+      ),
       {
         op: "add_node",
         parentId: "root",
@@ -443,15 +583,13 @@ export async function* generateLessonStream(input: {
           id: quizId,
           type: "quiz",
           title: lessonPlan.quiz.title,
-          items: [
-            {
-              id: "q1",
-              stem: lessonPlan.quiz.stem,
-              choices: lessonPlan.quiz.choices,
-              answer: lessonPlan.quiz.answer,
-              explanation: lessonPlan.quiz.explanation,
-            },
-          ],
+          items: lessonPlan.quiz.items.map((item, index) => ({
+            id: `q${index + 1}`,
+            stem: item.stem,
+            choices: item.choices,
+            answer: item.answer,
+            explanation: item.explanation,
+          })),
         },
       },
       {
@@ -462,6 +600,27 @@ export async function* generateLessonStream(input: {
           type: "reflection",
           title: "Exit ticket",
           prompt: lessonPlan.reflectionPrompt,
+        },
+      },
+      {
+        op: "add_node",
+        parentId: "root",
+        node: {
+          id: secTeacherTips,
+          type: "section",
+          title: "Teacher facilitation notes",
+          children: [],
+        },
+      },
+      {
+        op: "add_node",
+        parentId: secTeacherTips,
+        node: {
+          id: "txt-teacher-tips",
+          type: "text",
+          title: "How to run this lesson",
+          format: "markdown",
+          body: lessonPlan.teacherTips.map((tip) => `- ${tip}`).join("\n"),
         },
       },
     ];
@@ -475,94 +634,135 @@ export async function* generateLessonStream(input: {
     yield providerCompleted(s4, "orchestrator", "Lesson nodes materialized");
 
     const s5 = step();
-    yield providerStarted(s5, "fal", "Generative cover image (fal)");
-    const prompt = `Educational cover illustration for lesson: ${topic}. Clean vector-like shapes, readable labels, classroom-safe, no text overlay.`;
-    let falUsedFallback = !input.readiness.fal;
-    let image = fallbackFalImage(topic);
-    if (input.readiness.fal) {
-      try {
-        image = await falGenerateImage(prompt, input.env);
-        falUsedFallback = false;
-      } catch {
-        image = fallbackFalImage(topic);
-        falUsedFallback = true;
-      }
-    }
-    const storedImage = await mirrorRemoteAssetToS3({
-      asset: image,
-      lessonId,
-      nodeId: mediaId,
-      env: input.env,
-    }).catch(() => image);
-    const readyMedia = {
-      id: mediaId,
-      type: "media" as const,
-      title: "Cover visual",
-      modality: "image" as const,
-      alt: `Illustration related to ${topic}`,
-      status: "ready" as const,
-      asset: {
-        url: storedImage.url,
-        mime: storedImage.mime,
-        width: storedImage.width,
-        height: storedImage.height,
-      },
-      provenance: {
-        provider: "fal" as const,
-        model: input.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell",
-        prompt,
-        createdAt: new Date().toISOString(),
-      },
-    };
-    const mediaPatch: LessonPatchOp = { op: "replace_node", node: readyMedia };
-    doc = applyLessonPatch(doc, mediaPatch);
-    yield { type: "lesson_patch", runId, patch: mediaPatch };
-    yield { type: "lesson_snapshot", runId, lesson: doc };
-    yield providerCompleted(s5, "fal", storedImage.url, falUsedFallback);
+    yield providerStarted(
+      s5,
+      "fal",
+      `Parallel fal media generation (${mediaAssets.length} storyboard assets)`
+    );
 
-    const s6 = step();
-    yield providerStarted(s6, "fal", "Generative lesson video (fal)");
-    const videoPrompt = `Create a short educational video for lesson: ${topic}. Show motion that clarifies the concept for students. No on-screen text, classroom-safe, calm narration-style audio if the model supports audio.`;
-    let falVideoUsedFallback = !input.readiness.fal;
-    let video = fallbackFalVideo(topic);
-    if (input.readiness.fal) {
-      try {
-        video = await falGenerateVideo(videoPrompt, input.env);
-        falVideoUsedFallback = false;
-      } catch {
-        video = fallbackFalVideo(topic);
-        falVideoUsedFallback = true;
-      }
+    const generatedMedia = await Promise.all(
+      mediaAssets.map(async (planned) => {
+        const prompt =
+          planned.modality === "image"
+            ? [
+                planned.prompt,
+                "Style: clear educational diagram or anchor visual, uncluttered composition, classroom-safe, no decorative filler, no unreadable text overlay.",
+                `Teaching purpose: ${planned.teachingPurpose}`,
+              ].join(" ")
+            : [
+                planned.prompt,
+                "Show visible motion, sequence, or cause and effect that clarifies the concept for students. Classroom-safe, no on-screen text, calm narration-style audio if supported.",
+                `Teaching purpose: ${planned.teachingPurpose}`,
+              ].join(" ");
+
+        let usedFallback = !input.readiness.fal;
+        let generated =
+          planned.modality === "image"
+            ? fallbackFalImage(`${topic}-${planned.nodeId}`)
+            : fallbackFalVideo(`${topic}-${planned.nodeId}`);
+
+        console.info("[generate-lesson] fal storyboard asset requested", {
+          lessonId,
+          nodeId: planned.nodeId,
+          placement: planned.placement,
+          modality: planned.modality,
+          falReady: input.readiness.fal,
+          promptLength: prompt.length,
+        });
+
+        if (input.readiness.fal) {
+          try {
+            generated =
+              planned.modality === "image"
+                ? await falGenerateImage(prompt, input.env)
+                : await falGenerateVideo(prompt, input.env);
+            usedFallback = false;
+          } catch (error) {
+            console.error(
+              "[generate-lesson] fal storyboard asset failed, using fallback",
+              {
+                lessonId,
+                nodeId: planned.nodeId,
+                modality: planned.modality,
+                error: error instanceof Error ? error.message : String(error),
+              }
+            );
+            generated =
+              planned.modality === "image"
+                ? fallbackFalImage(`${topic}-${planned.nodeId}`)
+                : fallbackFalVideo(`${topic}-${planned.nodeId}`);
+            usedFallback = true;
+          }
+        }
+
+        const stored = await mirrorRemoteAssetToS3({
+          asset: generated,
+          lessonId,
+          nodeId: planned.nodeId,
+          env: input.env,
+        }).catch((error: unknown) => {
+          console.warn(
+            "[generate-lesson] storyboard media S3 mirror failed, using source URL",
+            {
+              lessonId,
+              nodeId: planned.nodeId,
+              usedFallback,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+          return generated;
+        });
+
+        const node = {
+          id: planned.nodeId,
+          type: "media" as const,
+          title: planned.title,
+          modality: planned.modality,
+          alt: planned.alt,
+          status: "ready" as const,
+          asset: {
+            url: stored.url,
+            mime: stored.mime,
+            width:
+              planned.modality === "image" && "width" in stored
+                ? stored.width
+                : undefined,
+            height:
+              planned.modality === "image" && "height" in stored
+                ? stored.height
+                : undefined,
+          },
+          provenance: {
+            provider: "fal" as const,
+            model:
+              planned.modality === "image"
+                ? (input.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell")
+                : (input.env.FAL_VIDEO_MODEL ?? "fal-ai/veo3.1/fast"),
+            prompt,
+            createdAt: new Date().toISOString(),
+          },
+        };
+
+        return { node, usedFallback, url: stored.url };
+      })
+    );
+
+    for (const generated of generatedMedia) {
+      const patch: LessonPatchOp = {
+        op: "replace_node",
+        node: generated.node,
+      };
+      doc = applyLessonPatch(doc, patch);
+      yield { type: "lesson_patch", runId, patch };
+      yield { type: "lesson_snapshot", runId, lesson: doc };
     }
-    const storedVideo = await mirrorRemoteAssetToS3({
-      asset: video,
-      lessonId,
-      nodeId: videoId,
-      env: input.env,
-    }).catch(() => video);
-    const readyVideo = {
-      id: videoId,
-      type: "media" as const,
-      title: "Motion preview",
-      modality: "video" as const,
-      alt: `Short classroom-safe video related to ${topic}`,
-      status: "ready" as const,
-      asset: {
-        url: storedVideo.url,
-        mime: storedVideo.mime,
-      },
-      provenance: {
-        provider: "fal" as const,
-        model: input.env.FAL_VIDEO_MODEL ?? "fal-ai/veo3.1/fast",
-        prompt: videoPrompt,
-        createdAt: new Date().toISOString(),
-      },
-    };
-    const videoPatch: LessonPatchOp = { op: "replace_node", node: readyVideo };
-    doc = applyLessonPatch(doc, videoPatch);
-    yield { type: "lesson_patch", runId, patch: videoPatch };
-    yield { type: "lesson_snapshot", runId, lesson: doc };
-    yield providerCompleted(s6, "fal", storedVideo.url, falVideoUsedFallback);
+
+    yield providerCompleted(
+      s5,
+      "fal",
+      generatedMedia.map((item) => item.url).join(", "),
+      generatedMedia.some((item) => item.usedFallback)
+    );
 
     const s7 = step();
     yield providerStarted(s7, "slng", "Narration audio (SLNG)");
@@ -672,10 +872,63 @@ export async function* generateLessonStream(input: {
 
     const s9 = step();
     yield providerStarted(s9, "orchestrator", "Persist sandboxed HTML lesson");
+    const firstImage = generatedMedia.find(
+      (item) => item.node.modality === "image"
+    );
+    const firstVideo = generatedMedia.find(
+      (item) => item.node.modality === "video"
+    );
     const artifact = createSandboxedLessonArtifact({
       prompt: input.transcript,
       plan: lessonPlan,
       runtimeScript,
+      media: {
+        assets: [
+          ...generatedMedia.map((item) => ({
+            url: item.node.asset.url,
+            mime: item.node.asset.mime,
+            alt: item.node.alt,
+            title: item.node.title,
+            modality: item.node.modality,
+            width: item.node.asset.width,
+            height: item.node.asset.height,
+          })),
+          ...(readyAudio.asset
+            ? [
+                {
+                  url: readyAudio.asset.url,
+                  mime: readyAudio.asset.mime,
+                  alt: readyAudio.alt,
+                  title: readyAudio.title,
+                  modality: "audio" as const,
+                },
+              ]
+            : []),
+        ],
+        image: firstImage?.node.asset
+          ? {
+              url: firstImage.node.asset.url,
+              mime: firstImage.node.asset.mime,
+              alt: firstImage.node.alt,
+              width: firstImage.node.asset.width,
+              height: firstImage.node.asset.height,
+            }
+          : undefined,
+        video: firstVideo?.node.asset
+          ? {
+              url: firstVideo.node.asset.url,
+              mime: firstVideo.node.asset.mime,
+              alt: firstVideo.node.alt,
+            }
+          : undefined,
+        audio: readyAudio.asset
+          ? {
+              url: readyAudio.asset.url,
+              mime: readyAudio.asset.mime,
+              alt: readyAudio.alt,
+            }
+          : undefined,
+      },
     });
     const persistCompleted = providerCompleted(
       s9,

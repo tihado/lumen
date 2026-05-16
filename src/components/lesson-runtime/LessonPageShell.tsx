@@ -101,7 +101,7 @@ function StudentBlockTree({
   if (node.type === "media") {
     return (
       <figure className="overflow-hidden rounded-xl border border-border/80 bg-muted/20">
-        {node.asset?.url ? (
+        {node.asset?.url && node.modality === "image" ? (
           <Image
             alt={node.alt}
             className="max-h-[420px] w-full object-cover"
@@ -110,7 +110,31 @@ function StudentBlockTree({
             unoptimized
             width={node.asset.width ?? 800}
           />
-        ) : (
+        ) : null}
+        {node.asset?.url && node.modality === "video" ? (
+          <video
+            className="max-h-[460px] w-full bg-black object-contain"
+            controls
+            playsInline
+            preload="metadata"
+            src={node.asset.url}
+          >
+            <track kind="captions" />
+          </video>
+        ) : null}
+        {node.asset?.url && node.modality === "audio" ? (
+          <div className="bg-background p-4">
+            <audio
+              className="w-full"
+              controls
+              preload="none"
+              src={node.asset.url}
+            >
+              <track kind="captions" />
+            </audio>
+          </div>
+        ) : null}
+        {node.asset?.url ? null : (
           <div className="p-8 text-center text-muted-foreground text-sm">
             Media unavailable
           </div>

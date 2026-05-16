@@ -45,6 +45,37 @@ export type SandboxedLessonArtifact = {
   spec: SandboxedLessonSpec;
 };
 
+type StaticLessonMediaItem = {
+  url: string;
+  mime: string;
+  alt: string;
+  title?: string;
+  modality: "image" | "video" | "audio";
+  width?: number;
+  height?: number;
+};
+
+type StaticLessonMedia = {
+  assets?: StaticLessonMediaItem[];
+  image?: {
+    url: string;
+    mime: string;
+    alt: string;
+    width?: number;
+    height?: number;
+  };
+  video?: {
+    url: string;
+    mime: string;
+    alt: string;
+  };
+  audio?: {
+    url: string;
+    mime: string;
+    alt: string;
+  };
+};
+
 const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
   {
     id: "mercury",
@@ -209,6 +240,7 @@ export function createSandboxedLessonArtifact(input: {
   prompt: string;
   plan: LessonPlan;
   runtimeScript?: string;
+  media?: StaticLessonMedia;
 }): SandboxedLessonArtifact {
   const spec: SandboxedLessonSpec = isSolarSystemPrompt(input.prompt)
     ? {
@@ -234,16 +266,21 @@ export function createSandboxedLessonArtifact(input: {
         durationMinutes: input.plan.durationMinutes,
         language: "en",
         quiz: {
-          question: input.plan.quiz.stem,
-          choices: input.plan.quiz.choices,
-          answer: input.plan.quiz.answer,
+          question: input.plan.quiz.items[0]?.stem ?? input.plan.quiz.title,
+          choices: input.plan.quiz.items[0]?.choices ?? [],
+          answer: input.plan.quiz.items[0]?.answer ?? "",
         },
       };
 
   const html =
     spec.kind === "solar-system"
       ? createSolarSystemHtml(spec)
-      : createStaticLessonHtml(input.plan, spec, input.runtimeScript);
+      : createStaticLessonHtml(
+          input.plan,
+          spec,
+          input.runtimeScript,
+          input.media
+        );
   validateSandboxedLessonHtml(html);
   return { title: spec.title, html, spec };
 }
@@ -349,8 +386,17 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
 function createStaticLessonHtml(
   plan: LessonPlan,
   spec: SandboxedLessonSpec,
-  runtimeScript?: string
+  runtimeScript?: string,
+  media?: StaticLessonMedia
 ) {
+  const mediaItems: StaticLessonMediaItem[] =
+    media?.assets ??
+    [
+      media?.image ? { ...media.image, modality: "image" as const } : null,
+      media?.video ? { ...media.video, modality: "video" as const } : null,
+      media?.audio ? { ...media.audio, modality: "audio" as const } : null,
+    ].filter((item) => item !== null);
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -363,8 +409,20 @@ function createStaticLessonHtml(
     h1 { font-size: clamp(34px, 6vw, 64px); line-height: 1; letter-spacing: 0; margin: 0 0 18px; }
     section { border-top: 1px solid #cbd5e1; padding: 26px 0; }
     p, li { line-height: 1.65; }
+    .lesson-copy { white-space: pre-wrap; line-height: 1.7; }
+    .grid-list { display: grid; gap: 12px; padding: 0; list-style: none; }
+    .grid-list li { border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; padding: 14px; }
+    .media-stack { display: grid; gap: 14px; }
+    .media-shell { overflow: hidden; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; }
+    .media-shell img, .media-shell video { display: block; width: 100%; max-height: 460px; object-fit: contain; background: #020617; }
+    .media-shell audio { width: 100%; padding: 14px; }
+    figcaption { border-top: 1px solid #dbe3ee; padding: 10px 14px; color: #475569; font-size: 13px; }
+    .term { display: block; font-weight: 800; color: #0f766e; }
     button { border: 1px solid #94a3b8; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; font: inherit; font-weight: 700; padding: 10px 12px; }
     button:hover { border-color: #0f766e; }
+    button.selected { border-color: #0f766e; background: #ccfbf1; color: #134e4a; }
+    button.correct { border-color: #15803d; background: #dcfce7; color: #14532d; }
+    button.wrong { border-color: #b91c1c; background: #fee2e2; color: #7f1d1d; }
     .objective-list { display: grid; gap: 10px; padding: 0; list-style: none; }
     .objective-list li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
     .objective-list button { height: 28px; width: 28px; padding: 0; line-height: 1; }
@@ -381,21 +439,104 @@ function createStaticLessonHtml(
     <p class="kicker">Saved lesson</p>
     <h1>${escapeHtml(spec.title)}</h1>
     <p>${escapeHtml(plan.hookBody)}</p>
+    ${
+      mediaItems.length
+        ? `<section>
+      <h2>Watch and listen</h2>
+      <div class="media-stack">
+        ${mediaItems
+          .map((item) => {
+            if (item.modality === "image") {
+              return `<figure class="media-shell"><img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.alt)}" loading="lazy" /><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
+            }
+            if (item.modality === "video") {
+              return `<figure class="media-shell"><video src="${escapeHtml(item.url)}" controls playsinline preload="metadata"><track kind="captions" /></video><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
+            }
+            return `<figure class="media-shell"><audio src="${escapeHtml(item.url)}" controls preload="none"><track kind="captions" /></audio><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
+          })
+          .join("")}
+      </div>
+    </section>`
+        : ""
+    }
+    <section>
+      <h2>Lecture script</h2>
+      <div class="lesson-copy">${escapeHtml(
+        plan.lectureScript
+          .map(
+            (item, index) =>
+              `${index + 1}. ${item.title}\nTeacher says: ${item.teacherNarration}\nStudents do: ${item.studentAction}`
+          )
+          .join("\n\n")
+      )}</div>
+    </section>
     <section>
       <h2>Learning objectives</h2>
       <ul class="objective-list">${plan.objectives.map((item) => `<li><button type="button" aria-pressed="false" data-objective-toggle>✓</button><span>${escapeHtml(item)}</span></li>`).join("")}</ul>
     </section>
     <section>
+      <h2>Key vocabulary</h2>
+      <ul class="grid-list">${plan.keyVocabulary.map((item) => `<li><span class="term">${escapeHtml(item.term)}</span>${escapeHtml(item.definition)}</li>`).join("")}</ul>
+    </section>
+    <section>
       <h2>Explanation</h2>
-      <p>${escapeHtml(plan.explanationBody)}</p>
+      ${plan.explanationSections.map((section) => `<article><h3>${escapeHtml(section.title)}</h3><div class="lesson-copy">${escapeHtml(section.body)}</div></article>`).join("")}
+    </section>
+    <section>
+      <h2>${escapeHtml(plan.workedExample.title)}</h2>
+      <div class="lesson-copy">${escapeHtml(plan.workedExample.body)}</div>
+    </section>
+    <section>
+      <h2>${escapeHtml(plan.activity.title)}</h2>
+      <p>${escapeHtml(plan.activity.instruction)}</p>
+      <ul class="grid-list">
+        ${[
+          ...plan.activity.strongItems.map((item, index) => ({
+            id: `strong-${index + 1}`,
+            label: item,
+            answer: "strong",
+          })),
+          ...plan.activity.weakItems.map((item, index) => ({
+            id: `weak-${index + 1}`,
+            label: item,
+            answer: "weak",
+          })),
+        ]
+          .map(
+            (item) => `<li data-classify-card data-answer="${item.answer}">
+              <span class="term">${escapeHtml(item.label)}</span>
+              <p>
+                <button type="button" data-classify-choice="${item.id}:strong">${escapeHtml(plan.activity.strongFitLabel)}</button>
+                <button type="button" data-classify-choice="${item.id}:weak">${escapeHtml(plan.activity.weakFitLabel)}</button>
+              </p>
+              <p data-classify-result></p>
+            </li>`
+          )
+          .join("")}
+      </ul>
     </section>
     <section>
       <h2>${escapeHtml(plan.quiz.title)}</h2>
-      <p>${escapeHtml(plan.quiz.stem)}</p>
-      <div class="choices">${plan.quiz.choices.map((choice) => `<button type="button" data-quiz-choice>${escapeHtml(choice)}</button>`).join("")}</div>
-      <p data-quiz-feedback></p>
-      <p><strong>Answer:</strong> <span data-quiz-answer>${escapeHtml(plan.quiz.answer)}</span></p>
-      <p>${escapeHtml(plan.quiz.explanation)}</p>
+      ${plan.quiz.items
+        .map(
+          (item, index) => `<article>
+        <h3>Question ${index + 1}</h3>
+        <p>${escapeHtml(item.stem)}</p>
+        <div class="choices">${item.choices.map((choice) => `<button type="button" data-quiz-choice>${escapeHtml(choice)}</button>`).join("")}</div>
+        <p data-quiz-feedback></p>
+        <p><strong>Answer:</strong> <span data-quiz-answer>${escapeHtml(item.answer)}</span></p>
+        <p>${escapeHtml(item.explanation)}</p>
+      </article>`
+        )
+        .join("")}
+    </section>
+    <section>
+      <h2>Exit ticket</h2>
+      <p>${escapeHtml(plan.reflectionPrompt)}</p>
+    </section>
+    <section>
+      <h2>Teacher facilitation notes</h2>
+      <ul>${plan.teacherTips.map((tip) => `<li>${escapeHtml(tip)}</li>`).join("")}</ul>
     </section>
   </main>
   <script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(runtimeScript ?? "")}</script>

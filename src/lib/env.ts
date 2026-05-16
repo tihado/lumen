@@ -33,31 +33,36 @@ export type AppEnv = z.infer<typeof envSchema> & {
   mode: "development" | "production" | "test";
 };
 
+function optionalEnv(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function readRawEnv(): Record<string, string | undefined> {
   return {
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-    OPENAI_MODEL: process.env.OPENAI_MODEL,
-    OPENAI_CODE_MODEL: process.env.OPENAI_CODE_MODEL,
-    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
-    FAL_KEY: process.env.FAL_KEY,
-    FAL_IMAGE_MODEL: process.env.FAL_IMAGE_MODEL,
-    FAL_VIDEO_MODEL: process.env.FAL_VIDEO_MODEL,
-    PIONEER_API_URL: process.env.PIONEER_API_URL,
-    PIONEER_API_KEY: process.env.PIONEER_API_KEY,
-    SLNG_API_KEY: process.env.SLNG_API_KEY,
-    SLNG_API_BASE_URL: process.env.SLNG_API_BASE_URL,
-    SLNG_TTS_MODEL: process.env.SLNG_TTS_MODEL,
-    SLNG_STT_MODEL: process.env.SLNG_STT_MODEL,
-    DATABASE_URL: process.env.DATABASE_URL,
-    S3_BUCKET: process.env.S3_BUCKET,
-    AWS_REGION: process.env.AWS_REGION,
-    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
-    AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN,
-    S3_ENDPOINT_URL: process.env.S3_ENDPOINT_URL,
-    S3_PUBLIC_BASE_URL: process.env.S3_PUBLIC_BASE_URL,
-    S3_PREFIX: process.env.S3_PREFIX,
-    S3_FORCE_PATH_STYLE: process.env.S3_FORCE_PATH_STYLE,
+    OPENAI_API_KEY: optionalEnv(process.env.OPENAI_API_KEY),
+    OPENAI_MODEL: optionalEnv(process.env.OPENAI_MODEL),
+    OPENAI_CODE_MODEL: optionalEnv(process.env.OPENAI_CODE_MODEL),
+    TAVILY_API_KEY: optionalEnv(process.env.TAVILY_API_KEY),
+    FAL_KEY: optionalEnv(process.env.FAL_KEY),
+    FAL_IMAGE_MODEL: optionalEnv(process.env.FAL_IMAGE_MODEL),
+    FAL_VIDEO_MODEL: optionalEnv(process.env.FAL_VIDEO_MODEL),
+    PIONEER_API_URL: optionalEnv(process.env.PIONEER_API_URL),
+    PIONEER_API_KEY: optionalEnv(process.env.PIONEER_API_KEY),
+    SLNG_API_KEY: optionalEnv(process.env.SLNG_API_KEY),
+    SLNG_API_BASE_URL: optionalEnv(process.env.SLNG_API_BASE_URL),
+    SLNG_TTS_MODEL: optionalEnv(process.env.SLNG_TTS_MODEL),
+    SLNG_STT_MODEL: optionalEnv(process.env.SLNG_STT_MODEL),
+    DATABASE_URL: optionalEnv(process.env.DATABASE_URL),
+    S3_BUCKET: optionalEnv(process.env.S3_BUCKET),
+    AWS_REGION: optionalEnv(process.env.AWS_REGION),
+    AWS_ACCESS_KEY_ID: optionalEnv(process.env.AWS_ACCESS_KEY_ID),
+    AWS_SECRET_ACCESS_KEY: optionalEnv(process.env.AWS_SECRET_ACCESS_KEY),
+    AWS_SESSION_TOKEN: optionalEnv(process.env.AWS_SESSION_TOKEN),
+    S3_ENDPOINT_URL: optionalEnv(process.env.S3_ENDPOINT_URL),
+    S3_PUBLIC_BASE_URL: optionalEnv(process.env.S3_PUBLIC_BASE_URL),
+    S3_PREFIX: optionalEnv(process.env.S3_PREFIX),
+    S3_FORCE_PATH_STYLE: optionalEnv(process.env.S3_FORCE_PATH_STYLE),
   };
 }
 

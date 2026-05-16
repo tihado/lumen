@@ -27,6 +27,11 @@ export async function falGenerateImage(
   }
   const model = env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell";
   const url = `https://fal.run/${model}`;
+  const startedAt = Date.now();
+  console.info("[fal] image request started", {
+    model,
+    promptLength: prompt.length,
+  });
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -39,8 +44,19 @@ export async function falGenerateImage(
       num_images: 1,
     }),
   });
+  console.info("[fal] image response received", {
+    model,
+    status: res.status,
+    ok: res.ok,
+    durationMs: Date.now() - startedAt,
+  });
   if (!res.ok) {
     const text = await res.text();
+    console.warn("[fal] image response body", {
+      model,
+      status: res.status,
+      bodyPreview: text.slice(0, 500),
+    });
     throw new Error(`fal HTTP ${res.status}: ${text.slice(0, 240)}`);
   }
   const data = (await res.json()) as {
@@ -48,8 +64,18 @@ export async function falGenerateImage(
   };
   const img = data.images?.[0];
   if (!img?.url) {
+    console.warn("[fal] image response missing url", {
+      model,
+      responseKeys: Object.keys(data),
+    });
     throw new Error("fal response missing images[0].url");
   }
+  console.info("[fal] image ready", {
+    model,
+    width: img.width,
+    height: img.height,
+    durationMs: Date.now() - startedAt,
+  });
   return {
     url: img.url,
     mime: "image/png",
@@ -84,6 +110,11 @@ export async function falGenerateVideo(
   }
   const model = env.FAL_VIDEO_MODEL ?? "fal-ai/veo3.1/fast";
   const url = `https://fal.run/${model}`;
+  const startedAt = Date.now();
+  console.info("[fal] video request started", {
+    model,
+    promptLength: prompt.length,
+  });
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -93,13 +124,24 @@ export async function falGenerateVideo(
     body: JSON.stringify({
       prompt,
       aspect_ratio: "16:9",
-      duration: "5s",
+      duration: "6s",
       resolution: "720p",
       generate_audio: true,
     }),
   });
+  console.info("[fal] video response received", {
+    model,
+    status: res.status,
+    ok: res.ok,
+    durationMs: Date.now() - startedAt,
+  });
   if (!res.ok) {
     const text = await res.text();
+    console.warn("[fal] video response body", {
+      model,
+      status: res.status,
+      bodyPreview: text.slice(0, 500),
+    });
     throw new Error(`fal video HTTP ${res.status}: ${text.slice(0, 240)}`);
   }
   const data = (await res.json()) as {
@@ -118,8 +160,19 @@ export async function falGenerateVideo(
   };
   const video = data.video ?? data.videos?.[0];
   if (!video?.url) {
+    console.warn("[fal] video response missing url", {
+      model,
+      responseKeys: Object.keys(data),
+    });
     throw new Error("fal response missing video.url");
   }
+  console.info("[fal] video ready", {
+    model,
+    mime: video.content_type,
+    fileName: video.file_name,
+    fileSize: video.file_size,
+    durationMs: Date.now() - startedAt,
+  });
   return {
     url: video.url,
     mime: video.content_type ?? "video/mp4",

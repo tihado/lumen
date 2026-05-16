@@ -39,18 +39,40 @@ export async function POST(request: Request) {
         lessonId: "manual",
         nodeId: modality,
         env,
-      }).catch(() => img);
+      }).catch((error: unknown) => {
+        console.warn("[api/media] S3 mirror failed, using fal URL", {
+          modality,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return img;
+      });
+      console.info("[api/media] media generation completed with fal", {
+        modality,
+        mirroredToS3: asset.url !== img.url,
+      });
       return Response.json({
         usedFallback: false,
         modality,
         asset,
       });
     }
-  } catch {
+    console.warn("[api/media] fal not ready, using fallback media", {
+      modality,
+      hasFalKey: Boolean(env.FAL_KEY),
+    });
+  } catch (error) {
+    console.error("[api/media] fal generation failed, using fallback media", {
+      modality,
+      error: error instanceof Error ? error.message : String(error),
+    });
     /* fall through */
   }
   const fb =
     modality === "video" ? fallbackFalVideo(prompt) : fallbackFalImage(prompt);
+  console.info("[api/media] fallback media returned", {
+    modality,
+    url: fb.url,
+  });
   return Response.json({
     usedFallback: true,
     modality,

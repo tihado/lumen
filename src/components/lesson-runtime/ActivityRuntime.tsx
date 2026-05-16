@@ -13,6 +13,8 @@ type ActivityRuntimeProps = {
 
 export function ActivityRuntime({ node }: ActivityRuntimeProps) {
   const [revealed, setRevealed] = useState(false);
+  const [classified, setClassified] = useState<Record<string, string>>({});
+  const [checked, setChecked] = useState(false);
 
   if (node.kind === "ordering" && node.steps?.length) {
     return (
@@ -75,6 +77,12 @@ export function ActivityRuntime({ node }: ActivityRuntimeProps) {
   }
 
   if (node.kind === "classification" && node.items?.length) {
+    const categories = node.categories ?? [];
+    const answeredCount = node.items.filter((it) => classified[it.id]).length;
+    const correctCount = node.items.filter(
+      (it) => classified[it.id] === it.categoryId
+    ).length;
+
     return (
       <Card>
         <CardHeader>
@@ -88,16 +96,73 @@ export function ActivityRuntime({ node }: ActivityRuntimeProps) {
         <CardContent className="space-y-3">
           {node.items.map((it) => (
             <div
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 px-3 py-2 text-sm"
+              className="space-y-3 rounded-lg border border-border/70 px-3 py-3 text-sm"
               key={it.id}
             >
-              <span>{it.label}</span>
-              <Badge variant="outline">
-                {node.categories?.find((c) => c.id === it.categoryId)?.label ??
-                  it.categoryId}
-              </Badge>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <span className="font-medium">{it.label}</span>
+                {checked ? (
+                  <Badge
+                    variant={
+                      classified[it.id] === it.categoryId
+                        ? "secondary"
+                        : "outline"
+                    }
+                  >
+                    {classified[it.id] === it.categoryId
+                      ? "Correct"
+                      : `Answer: ${
+                          categories.find((c) => c.id === it.categoryId)
+                            ?.label ?? it.categoryId
+                        }`}
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((category) => (
+                  <Button
+                    key={category.id}
+                    onClick={() => {
+                      setClassified((prev) => ({
+                        ...prev,
+                        [it.id]: category.id,
+                      }));
+                      setChecked(false);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant={
+                      classified[it.id] === category.id
+                        ? "secondary"
+                        : "outline"
+                    }
+                  >
+                    {category.label}
+                  </Button>
+                ))}
+              </div>
             </div>
           ))}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <Button
+              disabled={answeredCount < node.items.length}
+              onClick={() => setChecked(true)}
+              size="sm"
+              type="button"
+            >
+              Check sorting
+            </Button>
+            {checked ? (
+              <p className="text-muted-foreground text-sm">
+                {correctCount}/{node.items.length} sorted correctly. Revise any
+                card that did not fit.
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                Choose a category for every card before checking.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
     );
