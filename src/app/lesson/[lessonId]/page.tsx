@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { LessonPageShell } from "@/components/lesson-runtime/LessonPageShell";
 import { SandboxedLessonFrame } from "@/components/lesson-runtime/SandboxedLessonFrame";
 import { buttonVariants } from "@/components/ui/button";
-import { demoLessonFixture } from "@/lib/lesson/fixtures";
+import { solarSystemDemoArtifact } from "@/lib/lesson/demo-artifact";
 import {
   getLessonWithCurrentVersion,
   type PersistedLessonWithVersion,
@@ -20,8 +19,11 @@ export default async function LessonPage({
   const { lessonId } = await params;
   if (lessonId === "demo") {
     return (
-      <div className="min-h-screen bg-background">
-        <LessonPageShell doc={demoLessonFixture} />
+      <div className="relative min-h-screen">
+        <SandboxedLessonFrame
+          html={solarSystemDemoArtifact.html}
+          title={solarSystemDemoArtifact.title}
+        />
       </div>
     );
   }
