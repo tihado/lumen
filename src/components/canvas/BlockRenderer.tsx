@@ -108,7 +108,7 @@ export function BlockRenderer({
         <CardContent className="space-y-2">
           {selected ? (
             <Textarea
-              className="min-h-[120px] font-sans text-sm"
+              className="max-h-[55dvh] min-h-[180px] overflow-y-auto font-sans text-sm leading-relaxed [field-sizing:fixed]"
               onChange={(e) =>
                 onReplaceNode({
                   ...node,

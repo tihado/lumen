@@ -6,7 +6,6 @@ import {
   Home,
   LibraryBig,
   Loader2,
-  Palette,
   Play,
   Sparkles,
   TriangleAlert,
@@ -15,7 +14,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CanvasWorkspace } from "@/components/canvas/CanvasWorkspace";
 import { SourcesDrawer } from "@/components/canvas/SourcesDrawer";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +34,6 @@ import { applyLessonPatch } from "@/lib/lesson/patches";
 import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
 import { readStudioState } from "@/lib/lesson/studio-state";
 import {
-  type ProviderReadiness,
   parseStreamEventLine,
   type StudioTimelineRow,
 } from "@/lib/orchestrator/stream-events";
@@ -57,7 +55,6 @@ export function StudioClient({
     "I want to learn about the solar system"
   );
   const [lesson, setLesson] = useState<LessonDocument | null>(null);
-  const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
   const [timeline, setTimeline] = useState<LiveTimelineRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,21 +64,6 @@ export function StudioClient({
   const runningTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>()
   );
-
-  const readinessBadges = useMemo(() => {
-    if (!readiness) {
-      return null;
-    }
-    const entries = Object.entries(readiness) as [
-      keyof ProviderReadiness,
-      boolean,
-    ][];
-    return entries.map(([k, v]) => (
-      <Badge key={k} variant={v ? "default" : "outline"}>
-        {k}: {v ? "live" : "fallback"}
-      </Badge>
-    ));
-  }, [readiness]);
 
   useEffect(() => {
     if (!initialLessonId) {
@@ -226,9 +208,6 @@ export function StudioClient({
           const ev = parseStreamEventLine(line);
           if (!ev) {
             continue;
-          }
-          if (ev.type === "run_started") {
-            setReadiness(ev.readiness);
           }
           if (ev.type === "provider_started") {
             pushTimeline({
@@ -459,16 +438,6 @@ export function StudioClient({
         </div>
       </div>
 
-      {readinessBadges ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/65 bg-white/48 px-3 py-2 shadow-sm backdrop-blur-xl">
-          <span className="inline-flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
-            <Palette className="size-3.5 text-primary" />
-            Provider kit
-          </span>
-          {readinessBadges}
-        </div>
-      ) : null}
-
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,340px)_1fr]">
         <div className="flex min-h-0 flex-col gap-4">
           <Card className="border-white/80 bg-white/80 shadow-[0_22px_70px_oklch(0.47_0.09_180/0.14)]">
@@ -542,7 +511,7 @@ export function StudioClient({
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               <ScrollArea className="min-h-0 flex-1">
-                <div className="space-y-2 p-4">
+                <div className="min-w-0 max-w-full space-y-2 overflow-hidden p-4">
                   {timeline.length === 0 ? (
                     <div className="rounded-2xl border border-primary/25 border-dashed bg-[linear-gradient(135deg,oklch(0.97_0.04_95/0.82),oklch(0.96_0.035_185/0.7))] p-4 text-sm">
                       <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-white/75 text-primary shadow-sm">
@@ -558,7 +527,7 @@ export function StudioClient({
                     timeline.map((row) => (
                       <div
                         className={cn(
-                          "relative overflow-hidden rounded-2xl border px-3 py-2.5 text-xs shadow-sm transition-transform hover:-translate-y-0.5",
+                          "relative w-full min-w-0 max-w-full overflow-hidden rounded-2xl border px-3 py-2.5 text-xs shadow-sm transition-transform hover:-translate-y-0.5",
                           row.status === "completed"
                             ? "border-primary/18 bg-[linear-gradient(135deg,white,oklch(0.96_0.045_150/0.76))]"
                             : "border-accent/45 bg-[linear-gradient(135deg,white,oklch(0.965_0.055_75/0.72))]"
@@ -566,21 +535,24 @@ export function StudioClient({
                         key={row.key}
                       >
                         <div className="pointer-events-none absolute -top-5 -right-5 size-14 rounded-full bg-primary/8" />
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="inline-flex items-center gap-2 font-medium">
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="inline-flex min-w-0 items-center gap-2 font-medium">
                             <span
                               className={cn(
-                                "size-2.5 rounded-full",
+                                "size-2.5 shrink-0 rounded-full",
                                 row.status === "completed"
                                   ? "bg-primary"
                                   : "bg-accent",
                                 row.status === "running" && "studio-pulse"
                               )}
                             />
-                            {row.provider}
+                            <span className="min-w-0 truncate">
+                              {row.provider}
+                            </span>
                           </span>
                           <Badge
                             className={cn(
+                              "shrink-0",
                               row.status === "running" &&
                                 "border-accent/70 bg-accent/15"
                             )}
@@ -597,12 +569,12 @@ export function StudioClient({
                           </Badge>
                         </div>
                         {row.label ? (
-                          <p className="mt-1 text-muted-foreground">
+                          <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-all text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
                             {row.label}
                           </p>
                         ) : null}
                         {row.detail ? (
-                          <p className="mt-1 line-clamp-3 text-muted-foreground">
+                          <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-all text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
                             {row.detail}
                           </p>
                         ) : null}
