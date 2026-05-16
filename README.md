@@ -13,6 +13,58 @@ The core idea is not simply “ask an LLM for text.” Lumen behaves like an **A
 
 ---
 
+## Sponsor Integrations
+
+Lumen is built as a sponsor-aware AI pipeline. Each sponsor product is visible in the generation timeline, has a specific job in the lesson agent, and degrades gracefully when the key is missing.
+
+| Sponsor                                                          | What we use                                     | How Lumen uses it                                                                                                                                                                                                                                                                                | What is special here                                                                                                                                                                                     |
+| ---------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [OpenAI](https://openai.com)                                     | AI SDK provider for OpenAI models               | Generates the structured lesson plan and the saved lesson runtime. The planner returns a Zod-validated object with objectives, vocabulary, explanation, lecture script, activity, quiz, teacher tips, and media plan. The runtime step can generate inline JavaScript for the final HTML lesson. | We do not use OpenAI as a one-shot essay writer. OpenAI acts as the planning and runtime-coding brain inside a larger agent loop, with schema validation, provider status events, and fallback behavior. |
+| [Tavily](https://www.tavily.com/)                                | Search API for grounded classroom research      | Runs lesson-specific research queries for explanation material, student misconceptions, examples, and citations. Search excerpts become source cards and can be attached to generated lesson content.                                                                                            | Tavily turns the lesson from generic AI output into a grounded teaching artifact with citations and misconception-aware context.                                                                         |
+| [Pioneer](https://pioneer.ai/) by [Fastino](https://fastino.ai/) | Fastino GLiNER2-style entity extraction         | Extracts important concepts, vocabulary, entities, and slots from the teacher transcript plus research context. These extracted terms sharpen the planner prompt and help build a more focused lesson schema.                                                                                    | Pioneer gives the agent a lightweight structure-discovery step before planning, so the lesson is organized around teachable concepts instead of only raw prose.                                          |
+| [fal](https://fal.ai/)                                           | Image and video generation                      | Generates storyboarded visual assets for specific instructional moments. Lumen stores prompt, model, provider, status, and provenance for each generated image or video, and lets the teacher retry media blocks.                                                                                | fal is used as a multimodal asset factory attached to schema nodes, not as decoration. Each asset belongs to a lesson block and carries enough provenance to inspect or regenerate it.                   |
+| [SLNG](https://slng.ai/)                                         | Speech-to-text, text-to-speech, and Voice Agent | Transcribes teacher voice input, generates narration audio, and creates LiveKit-backed SLNG Voice Agent web sessions through `/api/voice/agent-session`. The agent receives `lesson_title`, `lesson_summary`, transcript, and product context for rehearsal.                                     | SLNG is the human interface layer: voice in for authoring, audio out for narration, and a live rehearsal agent that can ask student-style questions after the lesson exists.                             |
+
+### How the Sponsors Work Together
+
+```text
+Teacher voice or typed intent
+  ↓
+SLNG speech-to-text or typed fallback
+  ↓
+Tavily research and citations
+  ↓
+Pioneer / Fastino extraction of entities and concepts
+  ↓
+OpenAI structured lesson planning
+  ↓
+fal image and video generation for media blocks
+  ↓
+SLNG narration audio
+  ↓
+OpenAI runtime generation for saved HTML
+  ↓
+SLNG Voice Agent rehearsal on the finished lesson
+```
+
+The result is not a single model response. It is an orchestrated lesson-building workflow where every sponsor contributes a distinct capability: **voice**, **research**, **structure**, **planning**, **media**, **runtime**, and **rehearsal**.
+
+### Sponsor API Map
+
+| Capability                   | API / route in Lumen                    | Env / code                                                                                                                                            |
+| ---------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenAI lesson planner        | `POST /api/generate`, `/api/openai`     | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_CODE_MODEL`; `src/lib/orchestrator/providers/llm.ts`                                                        |
+| Tavily grounded search       | `POST /api/generate`                    | `TAVILY_API_KEY`; `src/lib/orchestrator/providers/tavily.ts`                                                                                          |
+| Pioneer / Fastino extraction | `POST /api/generate`                    | `PIONEER_API_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID`; `src/lib/orchestrator/providers/pioneer.ts`                                                 |
+| fal media generation         | `POST /api/generate`, `POST /api/media` | `FAL_KEY` or `FAL_API_KEY`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`; `src/lib/orchestrator/providers/fal.ts`                                             |
+| SLNG speech-to-text          | `POST /api/voice/transcribe`            | `SLNG_API_KEY`, `SLNG_API_BASE_URL`, `SLNG_STT_MODEL`; `src/lib/orchestrator/providers/slng.ts`                                                       |
+| SLNG text-to-speech          | `GET /api/audio`, `POST /api/audio`     | `SLNG_API_KEY`, `SLNG_API_BASE_URL`, `SLNG_TTS_MODEL`; `src/lib/orchestrator/providers/slng.ts`                                                       |
+| SLNG Voice Agent web session | `POST /api/voice/agent-session`         | `SLNG_API_KEY`, `SLNG_AGENT_API_BASE_URL`, `SLNG_AGENT_ID`; `src/app/api/voice/agent-session/route.ts`, `src/components/voice/SlngVoiceAgentRoom.tsx` |
+
+Optional storage: S3-compatible media mirroring through `S3_*` / `AWS_*` variables in `src/lib/env.ts`.
+
+---
+
 ## Why Lumen?
 
 Many AI tools produce a long block of text, leaving teachers to manually break it into a lesson flow, activity, quiz, media prompts, and classroom materials. Lumen takes a different approach: a lesson is a **schema-backed document**, built incrementally with patches, provenance for generated assets, and a visible provider timeline.
@@ -222,20 +274,6 @@ Core document schema in `src/lib/lesson/schema.ts`:
 | **Database**     | PostgreSQL, Drizzle ORM, `postgres`                    |
 | **Validation**   | Zod 4                                                  |
 | **Tooling**      | pnpm 11, Vitest, Biome via Ultracite, Lefthook         |
-
----
-
-## Hackathon Sponsors & APIs
-
-| Sponsor                                                          | Role in Lumen                                                          | Env / code                                                                                                                                                           |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [OpenAI](https://openai.com)                                     | Structured lesson planning and runtime/code generation through AI SDK. | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_CODE_MODEL`; `providers/llm.ts`, `/api/openai`                                                                             |
-| [Tavily](https://www.tavily.com/)                                | Web-aware research, excerpts, and citations.                           | `TAVILY_API_KEY`; `providers/tavily.ts`                                                                                                                              |
-| [Pioneer](https://pioneer.ai/) by [Fastino](https://fastino.ai/) | Entity/schema extraction.                                              | `PIONEER_API_URL`, `PIONEER_API_KEY`, `PIONEER_MODEL_ID`; `providers/pioneer.ts`                                                                                     |
-| [fal](https://fal.ai/)                                           | Image/video generation for storyboarded lesson media.                  | `FAL_KEY` or `FAL_API_KEY`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`; `providers/fal.ts`                                                                                 |
-| [SLNG](https://slng.ai/)                                         | Speech-to-text, text-to-speech, and the rehearsal voice agent.         | `SLNG_API_KEY`, `SLNG_API_BASE_URL`, `SLNG_AGENT_API_BASE_URL`, `SLNG_AGENT_ID`, `SLNG_STT_MODEL`, `SLNG_TTS_MODEL`; `providers/slng.ts`, `/api/voice/agent-session` |
-
-Optional storage: S3-compatible media mirroring through `S3_*` / `AWS_*` variables in `src/lib/env.ts`.
 
 ---
 
