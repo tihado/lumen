@@ -17,16 +17,18 @@ export type ExtractedEntity = {
 };
 
 const DEFAULT_PIONEER_MODEL = "fastino/gliner2-base-v1";
+const PIONEER_CHUNK_CHARS = 2800;
+const PIONEER_MAX_CHUNKS = 4;
 const PIONEER_ENTITY_LABELS = [
-  "lesson concept",
-  "domain vocabulary term",
-  "student misconception",
-  "ordered process or cycle",
-  "important object or component",
-  "cause effect relationship or comparison",
-  "measurement quantity unit date or duration",
-  "relevant person or group",
-  "relevant place setting or institution",
+  "concept",
+  "term",
+  "misconception",
+  "process",
+  "object",
+  "relationship",
+  "measurement",
+  "person",
+  "place",
 ];
 
 function normalizeKind(value: unknown): ExtractedEntity["kind"] {
@@ -162,6 +164,69 @@ function dedupeEntities(entities: ExtractedEntity[]) {
   });
 }
 
+function compactExtractionText(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function chunkExtractionText(text: string) {
+  const compacted = compactExtractionText(text);
+  if (!compacted) {
+    return [];
+  }
+
+  const chunks: string[] = [];
+  let remaining = compacted;
+  while (remaining && chunks.length < PIONEER_MAX_CHUNKS) {
+    if (remaining.length <= PIONEER_CHUNK_CHARS) {
+      chunks.push(remaining);
+      break;
+    }
+
+    const window = remaining.slice(0, PIONEER_CHUNK_CHARS);
+    const sentenceBreak = Math.max(
+      window.lastIndexOf(". "),
+      window.lastIndexOf("? "),
+      window.lastIndexOf("! ")
+    );
+    const spaceBreak = window.lastIndexOf(" ");
+    const cutAt =
+      sentenceBreak > PIONEER_CHUNK_CHARS * 0.55
+        ? sentenceBreak + 1
+        : spaceBreak > PIONEER_CHUNK_CHARS * 0.55
+          ? spaceBreak
+          : PIONEER_CHUNK_CHARS;
+    chunks.push(remaining.slice(0, cutAt).trim());
+    remaining = remaining.slice(cutAt).trim();
+  }
+
+  return chunks.filter(Boolean);
+}
+
+async function pioneerInferenceRequest(input: {
+  base: string;
+  headers: Record<string, string>;
+  modelId: string;
+  text: string;
+}) {
+  const res = await fetch(`${input.base.replace(/\/+$/, "")}/inference`, {
+    method: "POST",
+    headers: input.headers,
+    body: JSON.stringify({
+      model_id: input.modelId,
+      text: input.text,
+      schema: {
+        entities: PIONEER_ENTITY_LABELS,
+      },
+      threshold: 0.35,
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Pioneer HTTP ${res.status}: ${t.slice(0, 200)}`);
+  }
+  return collectEntities(await res.json());
+}
+
 export async function pioneerExtract(
   text: string,
   env: AppEnv
@@ -176,23 +241,22 @@ export async function pioneerExtract(
   if (env.PIONEER_API_KEY) {
     headers["X-API-Key"] = env.PIONEER_API_KEY;
   }
-  const res = await fetch(`${base.replace(/\/+$/, "")}/inference`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model_id: env.PIONEER_MODEL_ID ?? DEFAULT_PIONEER_MODEL,
-      text: text.slice(0, 12_000),
-      schema: {
-        entities: PIONEER_ENTITY_LABELS,
-      },
-      threshold: 0.35,
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Pioneer HTTP ${res.status}: ${t.slice(0, 200)}`);
+
+  const modelId = env.PIONEER_MODEL_ID ?? DEFAULT_PIONEER_MODEL;
+  const chunks = chunkExtractionText(text);
+  const entities: ExtractedEntity[] = [];
+  for (const chunk of chunks) {
+    entities.push(
+      ...(await pioneerInferenceRequest({
+        base,
+        headers,
+        modelId,
+        text: chunk,
+      }))
+    );
   }
-  return dedupeEntities(collectEntities(await res.json())).slice(0, 24);
+
+  return dedupeEntities(entities).slice(0, 24);
 }
 
 /** Lightweight keyword heuristics when Pioneer is unavailable. */

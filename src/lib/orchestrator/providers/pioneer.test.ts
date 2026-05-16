@@ -49,15 +49,15 @@ describe("pioneerExtract", () => {
       text: "Teach photosynthesis",
       schema: {
         entities: [
-          "lesson concept",
-          "domain vocabulary term",
-          "student misconception",
-          "ordered process or cycle",
-          "important object or component",
-          "cause effect relationship or comparison",
-          "measurement quantity unit date or duration",
-          "relevant person or group",
-          "relevant place setting or institution",
+          "concept",
+          "term",
+          "misconception",
+          "process",
+          "object",
+          "relationship",
+          "measurement",
+          "person",
+          "place",
         ],
       },
       threshold: 0.35,
@@ -77,7 +77,7 @@ describe("pioneerExtract", () => {
           output: {
             entities: {
               concept: ["ecosystem"],
-              "domain vocabulary term": [{ value: "habitat" }],
+              term: [{ value: "habitat" }],
             },
           },
         })
@@ -90,5 +90,32 @@ describe("pioneerExtract", () => {
       { label: "ecosystem", kind: "concept" },
       { label: "habitat", kind: "term" },
     ]);
+  });
+
+  it("chunks long text to stay under GLiNER2 model limits", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        entities: [{ text: "water cycle", type: "process" }],
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const longText = Array.from(
+      { length: 180 },
+      (_, index) =>
+        `Sentence ${index} explains evaporation, condensation, and precipitation for students.`
+    ).join(" ");
+
+    const result = await pioneerExtract(longText, testEnv());
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    for (const [, request] of fetchMock.mock.calls as unknown as [
+      RequestInfo | URL,
+      RequestInit,
+    ][]) {
+      const body = JSON.parse(String(request.body)) as { text: string };
+      expect(body.text.length).toBeLessThanOrEqual(2800);
+    }
+    expect(result).toEqual([{ label: "water cycle", kind: "process" }]);
   });
 });
