@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CanvasWorkspace } from "@/components/canvas/CanvasWorkspace";
 import { SourcesDrawer } from "@/components/canvas/SourcesDrawer";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,10 @@ import {
 } from "@/lib/orchestrator/stream-events";
 import { cn } from "@/lib/utils";
 
+type LiveTimelineRow = Omit<StudioTimelineRow, "status"> & {
+  status: StudioTimelineRow["status"] | "running";
+};
+
 export function StudioClient({
   initialLessonId,
 }: {
@@ -50,12 +54,15 @@ export function StudioClient({
   );
   const [lesson, setLesson] = useState<LessonDocument | null>(null);
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
-  const [timeline, setTimeline] = useState<StudioTimelineRow[]>([]);
+  const [timeline, setTimeline] = useState<LiveTimelineRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaRetryingId, setMediaRetryingId] = useState<string | null>(null);
   const [savedLessonId, setSavedLessonId] = useState<string | null>(null);
+  const runningTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>()
+  );
 
   const readinessBadges = useMemo(() => {
     if (!readiness) {
@@ -116,7 +123,22 @@ export function StudioClient({
     };
   }, [initialLessonId]);
 
-  const pushTimeline = useCallback((row: StudioTimelineRow) => {
+  const clearRunningTimer = useCallback((key: string) => {
+    const timer = runningTimersRef.current.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      runningTimersRef.current.delete(key);
+    }
+  }, []);
+
+  const clearRunningTimers = useCallback(() => {
+    for (const timer of runningTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    runningTimersRef.current.clear();
+  }, []);
+
+  const pushTimeline = useCallback((row: LiveTimelineRow) => {
     setTimeline((prev) => {
       const idx = prev.findIndex((r) => r.key === row.key);
       if (idx === -1) {
@@ -133,7 +155,28 @@ export function StudioClient({
     });
   }, []);
 
+  const scheduleRunningTransition = useCallback(
+    (key: string) => {
+      clearRunningTimer(key);
+      const timer = setTimeout(() => {
+        runningTimersRef.current.delete(key);
+        setTimeline((prev) =>
+          prev.map((row) =>
+            row.key === key && row.status === "started"
+              ? { ...row, status: "running" }
+              : row
+          )
+        );
+      }, 450);
+      runningTimersRef.current.set(key, timer);
+    },
+    [clearRunningTimer]
+  );
+
+  useEffect(() => clearRunningTimers, [clearRunningTimers]);
+
   const runGeneration = useCallback(async () => {
+    clearRunningTimers();
     setBusy(true);
     setError(null);
     setTimeline([]);
@@ -177,8 +220,10 @@ export function StudioClient({
               label: ev.label,
               status: "started",
             });
+            scheduleRunningTransition(ev.stepId);
           }
           if (ev.type === "provider_completed") {
+            clearRunningTimer(ev.stepId);
             pushTimeline({
               key: ev.stepId,
               provider: ev.provider,
@@ -206,9 +251,18 @@ export function StudioClient({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      clearRunningTimers();
       setBusy(false);
     }
-  }, [pushTimeline, router, savedLessonId, transcript]);
+  }, [
+    clearRunningTimer,
+    clearRunningTimers,
+    pushTimeline,
+    router,
+    savedLessonId,
+    scheduleRunningTransition,
+    transcript,
+  ]);
 
   const onReplaceNode = useCallback((node: LessonNode) => {
     setLesson((prev) => {
@@ -483,18 +537,26 @@ export function StudioClient({
                                 "size-2.5 rounded-full",
                                 row.status === "completed"
                                   ? "bg-primary"
-                                  : "studio-pulse bg-accent"
+                                  : "bg-accent",
+                                row.status === "running" && "studio-pulse"
                               )}
                             />
                             {row.provider}
                           </span>
                           <Badge
+                            className={cn(
+                              row.status === "running" &&
+                                "border-accent/70 bg-accent/15"
+                            )}
                             variant={
                               row.status === "completed"
                                 ? "secondary"
                                 : "outline"
                             }
                           >
+                            {row.status === "running" ? (
+                              <Loader2 className="animate-spin" />
+                            ) : null}
                             {row.status}
                           </Badge>
                         </div>

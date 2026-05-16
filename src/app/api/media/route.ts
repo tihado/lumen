@@ -8,6 +8,7 @@ import {
 } from "@/lib/orchestrator/providers/fal";
 
 export const runtime = "nodejs";
+export const maxDuration = 180;
 
 export async function POST(request: Request) {
   let prompt = "";
