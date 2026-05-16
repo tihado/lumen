@@ -6,7 +6,7 @@
 
 > **Not a wall of text. A canvas you can teach with.**
 
-**Lumen** is a **voice-first lesson authoring** web app. A teacher speaks or types a lesson intent; the **Next.js** server orchestrates **OpenAI**, **Tavily**, **Pioneer**, **fal**, and **SLNG**, streams progress to the browser as **NDJSON**, and fills an **editable canvas** plus a **publishable lesson** page backed by **PostgreSQL** (Drizzle). Missing API keys gracefully fall back to deterministic demo content so you can still explore the UI.
+**Lumen** is a **voice-first lesson authoring** web app. A teacher speaks or types a lesson intent; the **Next.js** server orchestrates **OpenAI**, **Tavily**, **Pioneer**, **fal**, and **SLNG**, streams progress to the browser as **NDJSON**, and fills an **editable canvas** backed by **PostgreSQL** (Drizzle). Missing API keys gracefully fall back to deterministic demo content so you can still explore the UI.
 
 <p align="center">
   <strong>Repository:</strong> <code>next-learning</code> (npm) · <a href="https://github.com/tihado/next-learn">github.com/tihado/next-learn</a>
@@ -15,14 +15,11 @@
 ### Screenshots
 
 <p align="center">
-  <img src="imgs/dashboard.png" alt="Lumen home and dashboard" width="280">
-  &nbsp;
+  <img src="imgs/dashboard.png" alt="Lumen home and dashboard" width="280"><br>
   <img src="imgs/class.png" alt="Lumen studio and lesson canvas" width="280">
-  &nbsp;
-  <img src="imgs/screen-lesson.png" alt="Lumen lesson runtime (preview export)" width="280">
 </p>
 
-<p align="center"><sub>Raster <code>.png</code> screenshots (including app captures <code>dashboard.png</code>, <code>class.png</code> and a compact lesson preview). SVG sources for logo, architecture, and UI wireframes: <code>imgs/*.svg</code>.</sub></p>
+<p align="center"><sub>Raster <code>.png</code> captures. SVG sources: <code>imgs/logo.svg</code>, <code>imgs/architecture.svg</code>.</sub></p>
 
 ---
 
@@ -54,8 +51,7 @@ These partners power the hackathon stack.
 
 | Piece | Responsibility |
 | ----- | ---------------- |
-| **`src/app/studio/`** | Teacher workspace: transcript, NDJSON consumer, canvas, publish |
-| **`src/app/lesson/[lessonId]/`** | Student-style **lesson runtime** (HTML artifact / sandboxed content) |
+| **`src/app/studio/`** | Teacher workspace: transcript, NDJSON consumer, canvas, save/publish flow |
 | **`src/app/api/*/route.ts`** | **Route Handlers** — no provider secrets in the browser |
 | **`src/lib/orchestrator/generate-lesson.ts`** | Stages: Tavily → Pioneer → OpenAI plan → fal media → SLNG narration metadata; yields `StreamEvent`s |
 | **`src/db/`** | **Drizzle** + **postgres** driver — lessons, versions, generation runs |
@@ -75,7 +71,7 @@ When **S3** env vars are set, generated **fal** assets and **SLNG** audio can be
 | **Voice & transcript** | Browser capture + **`/api/voice/transcribe`** (SLNG); typed fallback always available |
 | **Live provider timeline** | See Tavily, Pioneer, OpenAI, fal, SLNG steps complete with **live vs fallback** badges |
 | **Editable canvas** | Patch-driven lesson document; regenerate media per block where supported |
-| **Publish preview** | Persist lesson + open **`/lesson/[id]`** student view |
+| **Persisted lessons** | Save drafts and browse history under **`/lessons`** |
 | **Deterministic fallbacks** | Run without external keys for UI demos (quality limited) |
 | **Optional S3 mirror** | Longer-lived URLs for images, video, and TTS audio |
 
@@ -104,8 +100,7 @@ When **S3** env vars are set, generated **fal** assets and **SLNG** audio can be
 3. Run **`pnpm dev`** and open [http://localhost:3000](http://localhost:3000).
 4. Go **`/studio`**, enter or dictate a lesson prompt, and **Run generation**.
 5. Watch the **NDJSON stream** fill the canvas; edit blocks as needed.
-6. **Publish** to save and preview on **`/lesson/[lessonId]`**.
-7. List saved lessons at **`/lessons`**.
+6. **Save** your work and open **`/lessons`** to browse saved lessons.
 
 ---
 
@@ -191,7 +186,6 @@ Implementation: `src/app/api/**/route.ts`.
 | `pnpm test` | Vitest (`src/**/*.test.ts`) |
 | `pnpm run format` | Ultracite (Biome) |
 | `pnpm run db:generate` / `pnpm run db:migrate` | Drizzle migrations |
-| `pnpm run lesson-runtime:copy` | Copy lesson runtime assets |
 
 ---
 
@@ -213,7 +207,6 @@ src/
   app/
     api/                      # Route Handlers (generate, media, audio, voice, openai, lessons)
     studio/                   # Teacher workspace
-    lesson/[lessonId]/        # Published lesson view
     lessons/                  # Saved lessons list
     page.tsx                  # Marketing home
   components/                 # UI + canvas + voice
@@ -223,9 +216,9 @@ src/
     lesson/                   # schema, patches, repository, studio state
     media/                    # S3 helpers
 docs/                         # PROJECT, PLAN, CURRENT
-imgs/                         # README: PNG screenshots + SVG sources (logo, architecture, previews)
+imgs/                         # README: PNG screenshots + SVG (logo, architecture)
 drizzle/                      # SQL migrations (generated)
-scripts/                      # e.g. copy-lesson-runtime.mjs
+scripts/                      # maintenance scripts
 ```
 
 Path alias: `@/*` → `./src/*` ([`tsconfig.json`](./tsconfig.json)).
