@@ -1,21 +1,14 @@
 # Lumen
 
-<p align="center">
-  <img src="imgs/logo.png" alt="Lumen logo" width="200" height="200">
-</p>
-
 > **Not a wall of text. A canvas you can teach with.**
 
 **Lumen** is a **voice-first lesson authoring** web app. A teacher speaks or types a lesson intent; the **Next.js** server orchestrates **OpenAI**, **Tavily**, **Pioneer**, **fal**, and **SLNG**, streams progress to the browser as **NDJSON**, and fills an **editable canvas** backed by **PostgreSQL** (Drizzle). Missing API keys gracefully fall back to deterministic demo content so you can still explore the UI.
-
-### Screenshots
 
 <p align="center">
   <img src="imgs/dashboard.png" alt="Lumen home and dashboard" width="580"><br>
   <img src="imgs/class.png" alt="Lumen studio and lesson canvas" width="580">
 </p>
 
-<p align="center"><sub>Raster <code>.png</code> captures. SVG sources: <code>imgs/logo.svg</code>, <code>imgs/architecture.svg</code>.</sub></p>
 
 ---
 
@@ -231,11 +224,22 @@ Path alias: `@/*` → `./src/*` ([`tsconfig.json`](./tsconfig.json)).
 
 ## Contributors
 
-Authors from **git history** (`git shortlog -sne --all`). Update GitHub links if your username differs from the commit author name.
+Everyone below is from **`git shortlog -sne --all`** (counts include all branches). GitHub links use the **git author name** as `@handle`, except where we can infer from `users.noreply.github.com`—if yours is wrong, send a PR to fix it.
 
-- [NLag](https://github.com/NLag)
-- [nvti](https://github.com/nvti)
-- [honghanhh](https://github.com/honghanhh)
+| # | Author (git) | Commits | GitHub |
+|---|----------------|--------:|--------|
+| 1 | **nvti** | 16 | [@nvti](https://github.com/nvti) |
+| 2 | **NLag** | 9 | [@NLag](https://github.com/NLag) |
+| 3 | **honghanhh** | 5 | [@honghanhh](https://github.com/honghanhh) |
+| 4 | **lanwyb** | 3 | [@lanwyb](https://github.com/lanwyb) |
+
+Refresh locally:
+
+```bash
+git shortlog -sne --all
+```
+
+Upstream repo: [tihado/next-learn](https://github.com/tihado/next-learn).
 
 ---
 
