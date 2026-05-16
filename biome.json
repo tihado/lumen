@@ -20,6 +20,25 @@
       "recommended": true,
       "suspicious": {
         "noUnknownAtRules": "off"
+      },
+      "style": {
+        "useConsistentTypeDefinitions": {
+          "options": {
+            "style": "type"
+          },
+          "level": "error"
+        },
+        "noNestedTernary": "off",
+        "useFilenamingConvention": "off"
+      },
+      "performance": {
+        "useTopLevelRegex": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off"
+      },
+      "a11y": {
+        "noLabelWithoutControl": "off"
       }
     },
     "domains": {
