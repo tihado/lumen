@@ -34,10 +34,10 @@ export default function Home() {
             </span>
             <span>
               <span className="block font-medium text-[0.64rem] text-primary uppercase tracking-[0.18em]">
-                Lesson maker
+                Voice-first lessons
               </span>
               <span className="block font-semibold text-lg tracking-tight">
-                Lumen Studio
+                Lumen
               </span>
             </span>
           </Link>
@@ -75,7 +75,7 @@ export default function Home() {
             </p>
             <div className="space-y-3">
               <h1 className="text-balance font-semibold text-5xl tracking-tight sm:text-6xl">
-                Lumen Studio
+                Lumen
               </h1>
               <p className="max-w-xl text-balance font-medium text-2xl tracking-tight sm:text-3xl">
                 A cute, voice-first workshop for lessons that glow up fast.

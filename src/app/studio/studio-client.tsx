@@ -391,7 +391,7 @@ export function StudioClient({
             </div>
             <div className="min-w-0">
               <p className="font-medium text-[0.68rem] text-primary uppercase tracking-[0.18em]">
-                Lesson maker
+                Lumen
               </p>
               <h1 className="font-semibold text-2xl tracking-tight sm:text-3xl">
                 Studio

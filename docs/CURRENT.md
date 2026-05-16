@@ -1,4 +1,4 @@
-# Canvas Teacher AI — current progress
+# Lumen — current progress
 
 **Snapshot date:** 2026-05-16  
 **Source docs reviewed:** `docs/PLAN.md`, `docs/PROJECT.md`  
@@ -6,7 +6,7 @@
 
 ## Current product state
 
-Canvas Teacher AI is now beyond the original scaffold. The repository contains a working Next.js 16 App Router demo path for generating a structured lesson from a typed or browser-dictated prompt, streaming provider progress to the studio, rendering an editable teacher canvas, persisting a sandboxed HTML lesson version to Postgres, and opening a student-facing lesson page.
+Lumen is now beyond the original scaffold. The repository contains a working Next.js 16 App Router demo path for generating a structured lesson from a typed or browser-dictated prompt, streaming provider progress to the studio, rendering an editable teacher canvas, persisting a sandboxed HTML lesson version to Postgres, and opening a student-facing lesson page.
 
 The current implementation is best described as a **provider-visible persisted demo MVP**. It has credible fallback behavior for most external providers, but the main generation flow still requires `DATABASE_URL` because `/api/generate` writes lessons, versions, and generation runs to Postgres.
 

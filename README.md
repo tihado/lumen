@@ -1,81 +1,318 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# next-learning — **Lumen**
 
-## Getting Started
+**Lumen** is a voice-first lesson authoring app built on **Next.js**: teachers describe a lesson in natural language, the server **orchestrates** multiple AI providers (OpenAI, Tavily, Pioneer/GLiNER2, fal, SLNG), streams progress to the browser as **NDJSON**, and materializes an **editable canvas** plus an optional **published lesson** view. The canonical product and architecture description lives in [`docs/PROJECT.md`](./docs/PROJECT.md).
 
-First, run the development server:
+> **Framework note:** This repo tracks a **non-standard Next.js** line. Before changing routing, `next.config`, or data APIs, read the guides under `node_modules/next/dist/docs/` and follow deprecation notices (see root [`AGENTS.md`](./AGENTS.md)).
+
+---
+
+## Table of contents
+
+1. [Features](#features)
+2. [Tech stack](#tech-stack)
+3. [Prerequisites](#prerequisites)
+4. [Installation](#installation)
+5. [Environment variables](#environment-variables)
+6. [Scripts](#scripts)
+7. [Database (Drizzle + PostgreSQL)](#database-drizzle--postgresql)
+8. [Project structure](#project-structure)
+9. [App routes (UI)](#app-routes-ui)
+10. [HTTP API reference](#http-api-reference)
+11. [Generation stream (NDJSON)](#generation-stream-ndjson)
+12. [Testing, linting, and Git hooks](#testing-linting-and-git-hooks)
+13. [Deployment notes](#deployment-notes)
+14. [Contributors](#contributors)
+
+---
+
+## Features
+
+- **Studio** (`/studio`): typed or dictated transcript, **NDJSON** generation stream, timeline of provider steps, editable lesson canvas, publish flow.
+- **Lesson runtime** (`/lesson/[lessonId]`): student-style view of a persisted lesson (including a static **`/lesson/demo`** fixture).
+- **Lessons index** (`/lessons`): list persisted lessons from the database.
+- **Provider fallbacks**: missing API keys trigger deterministic or cached demo content where implemented (see orchestrator and each route).
+- **Optional S3**: mirror fal media and SLNG audio to a bucket for stable public URLs.
+
+---
+
+## Tech stack
+
+| Layer | Technology | Role |
+| ----- | ---------- | ---- |
+| **Framework** | [Next.js](https://nextjs.org/) **16.2** (App Router) | SSR, Route Handlers, React Server/Client Components |
+| **UI** | [React](https://react.dev/) **19.2** | Component model |
+| **Language** | [TypeScript](https://www.typescriptlang.org/) **5.9** | Type-safe app and APIs |
+| **Styling** | [Tailwind CSS](https://tailwindcss.com/) **v4** + [`@tailwindcss/postcss`](https://github.com/tailwindlabs/tailwindcss) | Utility-first CSS |
+| **Animation** | [`tw-animate-css`](https://github.com/Wombosvideo/tw-animate-css) | CSS-driven animations |
+| **Primitives** | [`@base-ui/react`](https://base-ui.com/react/overview/quick-start) | Accessible unstyled UI primitives |
+| **Icons** | [`lucide-react`](https://lucide.dev/) | Icon set |
+| **Variants** | [`class-variance-authority`](https://cva.style/docs) + [`clsx`](https://github.com/lukeed/clsx) + [`tailwind-merge`](https://github.com/dcastil/tailwind-merge) | Component variants and class merging |
+| **Validation** | [Zod](https://zod.dev/) **4.x** | Env and payload validation |
+| **IDs** | [`nanoid`](https://github.com/ai/nanoid) | Short unique identifiers |
+| **ORM / DB** | [Drizzle ORM](https://orm.drizzle.team/) + [`postgres`](https://github.com/porsager/postgres) (driver) | PostgreSQL access |
+| **AI orchestration** | [Vercel AI SDK](https://sdk.vercel.ai/docs): `ai`, `@ai-sdk/react`, `@ai-sdk/openai`, `@ai-sdk/fal` | Streaming and provider calls |
+| **3D (where used)** | [`three`](https://threejs.org/) | 3D visuals in lesson runtime when applicable |
+| **Server boundary** | [`server-only`](https://www.npmjs.com/package/server-only) | Enforce server-only modules |
+
+### Dev tooling
+
+| Tool | Purpose |
+| ---- | ------- |
+| [**pnpm**](https://pnpm.io/) **11.x** | Package manager (see `packageManager` in `package.json`) |
+| [**Biome**](https://biomejs.dev/) (via [**Ultracite**](https://github.com/haydenbleasel/ultracite)) | Lint + format (`pnpm run format`) |
+| [**Vitest**](https://vitest.dev/) **4.x** | Unit tests (`pnpm test`) |
+| [**Lefthook**](https://github.com/evilmartians/lefthook) | Git `pre-commit` hook running Ultracite on staged files |
+| [**Drizzle Kit**](https://orm.drizzle.team/kit-docs/overview) | Migrations and schema push (`pnpm run db:*`) |
+
+### External services (via env)
+
+| Service | Usage in codebase |
+| ------- | ------------------- |
+| **OpenAI** | Lesson composition, JSON/code helpers (`/api/openai`, orchestrator) |
+| **Tavily** | Web search for lesson grounding |
+| **Pioneer / GLiNER2** | Entity extraction HTTP API |
+| **fal** | Image and video generation (`@ai-sdk/fal` + REST) |
+| **SLNG** | Speech-to-text and text-to-speech proxies |
+| **AWS S3** (or compatible) | Optional upload of generated bytes |
+
+---
+
+## Prerequisites
+
+- **Node.js** compatible with Next.js 16 (Node 20+ recommended).
+- **pnpm** 9+ (repo pins **pnpm 11.1.2** via `packageManager`; use [Corepack](https://nodejs.org/api/corepack.html) or install pnpm globally).
+- **PostgreSQL** and a `DATABASE_URL` whenever you use persisted lessons, `/api/lessons`, or studio flows that write to the DB.
+
+---
+
+## Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/tihado/next-learn.git
+cd next-learn   # or your fork / local folder name
+corepack enable   # optional: ensures pinned pnpm version
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create a local env file at **`.env.local`** in the project root (Next.js loads it automatically). Add the variables you need from the [table below](#environment-variables).
 
-## Canvas Teacher AI (Provider Demo MVP)
+Configure at least `DATABASE_URL` for full persistence (see below), then run migrations. Start the dev server:
 
-- **Studio:** [http://localhost:3000/studio](http://localhost:3000/studio) — typed or browser-dictated transcript, NDJSON generation stream, editable canvas, **Publish preview** (saves to `localStorage` and opens `/lesson/[id]`).
-- **Sample lesson:** [http://localhost:3000/lesson/demo](http://localhost:3000/lesson/demo) — fixture document without publishing.
+```bash
+pnpm dev
+```
 
-### Environment variables (server)
+Open [http://localhost:3000](http://localhost:3000).
 
-| Variable                             | Enables                                                                                                                                                                        |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_API_KEY`                     | Live LLM lesson composition through AI SDK's direct OpenAI provider (otherwise deterministic lesson fallback).                                                                  |
-| `OPENAI_MODEL`                       | Optional OpenAI model override for lesson composition and `/api/openai` text / JSON generation (default `gpt-5`).                                                              |
-| `OPENAI_CODE_MODEL`                  | Optional OpenAI code model override for `/api/openai` code generation and generated inline lesson JavaScript (default `gpt-5.2-codex`).                                        |
-| `TAVILY_API_KEY`                     | Live Tavily search (otherwise demo fallback excerpts).                                                                                                                         |
-| `FAL_KEY`                            | Live fal image and video generation.                                                                                                                                           |
-| `FAL_IMAGE_MODEL`                    | Optional fal image model override (default `fal-ai/flux/schnell`).                                                                                                             |
-| `FAL_VIDEO_MODEL`                    | Optional fal video model override (default `fal-ai/veo3.1/fast`).                                                                                                              |
-| `PIONEER_API_URL`                    | POST `{ text }` → `{ entities: [...] }` at `{base}/extract` (optional `PIONEER_API_KEY` bearer). Without URL, heuristic extraction runs and is labeled **fallback** in the UI. |
-| `SLNG_API_KEY` + `SLNG_API_BASE_URL` | Live SLNG audio endpoints for text-to-speech and speech-to-text; studio still keeps typed/browser speech fallback.                                                             |
-| `SLNG_TTS_MODEL`                     | Optional SLNG TTS model path (default `slng/deepgram/aura:2`).                                                                                                                 |
-| `SLNG_STT_MODEL`                     | Optional SLNG STT model path (default `slng/deepgram/nova:3`).                                                                                                                 |
-| `S3_BUCKET` + `AWS_REGION`           | Optional S3 bucket for storing generated fal/SLNG media.                                                                                                                       |
-| `AWS_ACCESS_KEY_ID`                  | S3 access key.                                                                                                                                                                |
-| `AWS_SECRET_ACCESS_KEY`              | S3 secret key.                                                                                                                                                                |
-| `AWS_SESSION_TOKEN`                  | Optional temporary credential token.                                                                                                                                          |
-| `S3_ENDPOINT_URL`                    | Optional S3-compatible endpoint for R2, MinIO, etc.                                                                                                                           |
-| `S3_PUBLIC_BASE_URL`                 | Optional public CDN/base URL for uploaded media.                                                                                                                              |
-| `S3_PREFIX`                          | Optional object key prefix (default `lesson-media`).                                                                                                                          |
-| `S3_FORCE_PATH_STYLE`                | Set to `true` for path-style S3-compatible endpoints.                                                                                                                         |
+---
 
-### Provider endpoints
+## Environment variables
 
-- `POST /api/generate` — orchestrates Tavily search, Pioneer extraction, OpenAI structured lesson JSON, fal image/video media, SLNG narration metadata, then persists the lesson.
-- `POST /api/media` — generate `{ modality: "image" | "video", prompt }` through fal, with demo fallback assets.
-- `GET|POST /api/audio` — synthesize narration audio through SLNG TTS.
-- `POST /api/voice/transcribe` — transcribe uploaded audio through SLNG STT.
-- `POST /api/openai` — generate `{ mode: "text" | "json" | "code", prompt }` through OpenAI.
+Validated in [`src/lib/env.ts`](./src/lib/env.ts). All keys are optional unless you need the corresponding feature.
 
-When S3 env vars are configured, generated fal image/video assets and SLNG
-narration audio are mirrored to S3. Lesson media URLs point at the S3/CDN URL
-instead of provider-hosted temporary URLs.
+| Variable | Purpose |
+| -------- | ------- |
+| `DATABASE_URL` | **Required** for DB-backed lessons (`getDb()`). PostgreSQL connection string. |
+| `OPENAI_API_KEY` | Live LLM path; without it, orchestrator uses deterministic fallbacks where implemented. |
+| `OPENAI_MODEL` | Override default OpenAI model for lesson composition (orchestrator / defaults in provider code). |
+| `OPENAI_CODE_MODEL` | Override model for code-style generation in `/api/openai` `mode: "code"`. |
+| `TAVILY_API_KEY` | Live Tavily search; otherwise search excerpts may use demo fallbacks. |
+| `FAL_KEY` or `FAL_API_KEY` | fal image/video; either name is accepted by readiness checks. |
+| `FAL_IMAGE_MODEL` | Override fal image model id. |
+| `FAL_VIDEO_MODEL` | Override fal video model id. |
+| `PIONEER_API_URL` | Base URL for Pioneer extract endpoint (`POST …/extract` with `{ text }`). |
+| `PIONEER_API_KEY` | Optional bearer token for Pioneer. |
+| `SLNG_API_KEY` | SLNG API key. |
+| `SLNG_API_BASE_URL` | SLNG REST base URL (both required for `readiness.slng`). |
+| `SLNG_TTS_MODEL` | TTS model path override. |
+| `SLNG_STT_MODEL` | STT model path override. |
+| `S3_BUCKET`, `AWS_REGION` | S3 bucket and region for mirrored media. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | AWS credentials. |
+| `AWS_SESSION_TOKEN` | Optional session token. |
+| `S3_ENDPOINT_URL` | Custom S3-compatible endpoint (e.g. MinIO, R2). |
+| `S3_PUBLIC_BASE_URL` | Public base URL for objects (CDN). |
+| `S3_PREFIX` | Key prefix inside the bucket. |
+| `S3_FORCE_PATH_STYLE` | `"true"` for path-style addressing on some providers. |
 
-Run tests: `pnpm test`. Format: `pnpm run format`.
+Never commit real secrets; use `.env.local` (gitignored) or your host’s secret store.
 
-Full product spec: [docs/PROJECT.md](./docs/PROJECT.md).
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Description |
+| ------- | ----------- |
+| `pnpm dev` | Next.js development server |
+| `pnpm build` | Production build |
+| `pnpm start` | Run production server (after `build`) |
+| `pnpm test` | Vitest (`src/**/*.test.ts`) |
+| `pnpm run format` | Ultracite (Biome) fix/format |
+| `pnpm run db:generate` | Drizzle Kit: generate SQL migrations from schema |
+| `pnpm run db:migrate` | Drizzle Kit: apply migrations |
+| `pnpm run lesson-runtime:copy` | Copy lesson runtime assets (see `scripts/copy-lesson-runtime.mjs`) |
+| `pnpm prepare` | Installs Lefthook hooks |
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Database (Drizzle + PostgreSQL)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Schema:** [`src/db/schema.ts`](./src/db/schema.ts)
+- **Client:** [`src/db/client.ts`](./src/db/client.ts) — throws if `DATABASE_URL` is missing when the DB is used
+- **Config:** [`drizzle.config.ts`](./drizzle.config.ts) — dialect `postgresql`, migrations output in `./drizzle`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+export DATABASE_URL="postgres://user:pass@localhost:5432/yourdb"
+pnpm run db:generate   # when schema changes
+pnpm run db:migrate    # apply migrations
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Project structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+src/
+  app/                    # Next.js App Router: pages + Route Handlers
+    api/                  # HTTP APIs (see below)
+    studio/               # Teacher studio UI
+    lesson/[lessonId]/    # Published lesson view
+    lessons/              # Lesson list UI
+  components/             # Shared UI (including `components/ui`)
+  db/                     # Drizzle client + schema
+  lib/                    # Orchestrator, lesson schema, providers, env, media helpers
+scripts/                  # Maintenance scripts (e.g. lesson-runtime copy)
+drizzle/                  # Generated migrations (after db:generate)
+docs/PROJECT.md           # Full product & architecture spec
+```
+
+Path alias: `@/*` → [`src/*`](./tsconfig.json).
+
+---
+
+## App routes (UI)
+
+| Route | Description |
+| ----- | ----------- |
+| [`/`](./src/app/page.tsx) | Marketing / home for **Lumen** with links to studio and lessons |
+| [`/studio`](./src/app/studio/page.tsx) | **Lumen** workspace: transcript, NDJSON stream, canvas |
+| [`/lessons`](./src/app/lessons/page.tsx) | Lists lessons from API / database |
+| [`/lesson/demo`](./src/app/lesson/[lessonId]/page.tsx) | Demo fixture lesson id |
+| [`/lesson/[lessonId]`](./src/app/lesson/[lessonId]/page.tsx) | Renders a persisted lesson version |
+
+---
+
+## HTTP API reference
+
+All APIs are **Route Handlers** under `src/app/api/**/route.ts`. Unless noted, `Content-Type: application/json` for JSON bodies.
+
+### `POST /api/generate`
+
+**Orchestrated lesson generation** with a streaming response.
+
+- **Body:** `{ "transcript": string, "lessonId"?: string }`
+- **`transcript`:** Required non-empty string (teacher intent).
+- **Response:** `Content-Type: application/x-ndjson; charset=utf-8` — one JSON object per line (see [Generation stream](#generation-stream-ndjson)).
+- **Runtime:** Node.js; `maxDuration` **120** seconds.
+
+### `POST /api/media`
+
+Generate a single **image** or **video** via fal (or demo fallback).
+
+- **Body:** `{ "prompt": string, "modality"?: "image" | "video" }` (default `image`)
+- **Response:** JSON including `asset` (url, mime, etc.) and `usedFallback` when fal is not configured.
+
+### `GET` / `POST /api/audio`
+
+**SLNG text-to-speech.**
+
+- **GET:** Query `?text=...` — redirects to S3 URL when upload succeeds, otherwise returns raw audio bytes with `Content-Type` from SLNG.
+- **POST:** Body `{ "text": string }` — returns audio bytes (and optional `X-Media-URL` when mirrored to S3).
+- **503** if SLNG env is incomplete.
+
+### `POST /api/voice/transcribe`
+
+**SLNG speech-to-text.**
+
+- **Body:** `multipart/form-data` with field **`audio`** (file `Blob`). Optional `language` string field.
+- **Response:** JSON transcript fields from provider + `usedFallback: false` on success.
+
+### `POST /api/openai`
+
+Thin proxy for OpenAI via shared LLM helpers.
+
+- **Body:** `{ "mode": "text" | "json" | "code", "prompt": string }`
+- **Response:** JSON with generated content (shape depends on `mode`).
+- **503** with `{ error: "OPENAI_API_KEY missing", usedFallback: true }` when the LLM is not configured.
+
+### `GET /api/lessons`
+
+List persisted lessons.
+
+- **Response:** `{ "lessons": LessonRow[] }` or `500` on failure.
+
+### `GET /api/lessons/[lessonId]`
+
+Fetch one lesson and its **current** version payload.
+
+- **Response:** `{ lesson, version }` JSON; **404** if not found.
+
+### `POST /api/lessons/[lessonId]/regenerate`
+
+Re-runs `generateLessonStream` for an existing lesson (optionally with a new `prompt` in the body), waits for completion, returns updated lesson JSON.
+
+- **Body:** optional `{ "prompt": string }` — defaults to stored lesson prompt.
+- **Response:** Updated `{ lesson, version }` or error status.
+
+---
+
+## Generation stream (NDJSON)
+
+`POST /api/generate` streams **newline-delimited JSON**. Each line is one `StreamEvent` (see [`src/lib/orchestrator/stream-events.ts`](./src/lib/orchestrator/stream-events.ts)):
+
+| `type` | Meaning |
+| ------ | ------- |
+| `run_started` | Run id, `lessonId`, provider readiness flags |
+| `provider_started` | A logical step began (`provider`, `stepId`, `label`) |
+| `provider_completed` | Step finished (`detail`, optional `usedFallback`) |
+| `lesson_patch` | Incremental patch to apply to lesson document state |
+| `lesson_snapshot` | Full `LessonDocument` snapshot |
+| `run_completed` | Successful end of run |
+| `run_failed` | Terminal error with `message` |
+
+The studio client parses lines with `parseStreamEventLine` and updates UI state accordingly.
+
+---
+
+## Testing, linting, and Git hooks
+
+```bash
+pnpm test           # Vitest, Node environment
+pnpm run format     # Ultracite / Biome autofix
+```
+
+**Lefthook** runs `pnpm dlx ultracite fix` on staged `*.{js,jsx,ts,tsx,json,jsonc,css}` files before commit (`lefthook.yml`).
+
+---
+
+## Deployment notes
+
+- Configure the same **environment variables** on your host (e.g. Vercel project settings).
+- Long-running generation uses **`maxDuration`** on orchestration routes; ensure your platform allows sufficient duration (e.g. Vercel Pro limits).
+- For **S3**, ensure the bucket CORS/policy allows the browser to load public object URLs if you redirect or embed them.
+
+---
+
+## Documentation
+
+- **[`docs/PROJECT.md`](./docs/PROJECT.md)** — product goals, personas, orchestration diagrams, domain model, UX notes, and roadmap.
+- **[`AGENTS.md`](./AGENTS.md)** — agent / implementer rules for this Next.js fork.
+
+---
+
+## Contributors
+
+Authors derived from **git commit history** (`git shortlog -sne --all`). GitHub links use the commit author name as the username when no `users.noreply.github.com` id is present—update this list if your GitHub username differs.
+
+- [NLag](https://github.com/NLag)
+- [nvti](https://github.com/nvti)
+- [honghanhh](https://github.com/honghanhh)

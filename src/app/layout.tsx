@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Lumen Studio",
+  title: "Lumen",
   description:
-    "A playful lesson authoring studio for grounded, editable teaching materials.",
+    "Voice-first lesson authoring — grounded, editable teaching materials.",
 };
 
 export default function RootLayout({

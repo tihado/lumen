@@ -2,7 +2,7 @@
 
 ## Product Goal
 
-Ship **Canvas Teacher AI** as a polished voice-first lesson authoring demo: a teacher gives a lesson intent, the app researches and generates a structured multimedia lesson, the teacher can edit or regenerate individual blocks, and the final lesson can be shared as a student-ready page.
+Ship **Lumen** as a polished voice-first lesson authoring demo: a teacher gives a lesson intent, the app researches and generates a structured multimedia lesson, the teacher can edit or regenerate individual blocks, and the final lesson can be shared as a student-ready page.
 
 This plan is based on the current repository state on 2026-05-16. The app already has a Next.js App Router structure, a studio surface, NDJSON generation streaming, lesson schema/patching, provider fallbacks, Drizzle persistence, sandboxed HTML lesson artifacts, and student preview routes.
 

@@ -1,4 +1,4 @@
-# Canvas Teacher AI — technical specification
+# Lumen — technical specification
 
 **Repository:** `next-learning`  
 **Document type:** technical architecture & product spec (hackathon-oriented)  
@@ -32,9 +32,9 @@ Align engineering, integrations, and judging criteria around a **voice-first** w
 
 ## 2. Product definition
 
-### 2.1 Working name
+### 2.1 Product name
 
-**Canvas Teacher AI**
+**Lumen**
 
 ### 2.2 One-liner
 
@@ -590,7 +590,7 @@ ASCII wire (widths are **targets**, not hard law):
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│  Canvas Teacher AI                            [Save]  [Export]    │
+│  Lumen                                        [Save]  [Export]    │
 ├──────────────────────┬──────────────────────────────────────────┤
 │  VOICE PANEL         │  CANVAS (scroll)                           │
 │  ~380px fixed        │  flex-1                                    │
