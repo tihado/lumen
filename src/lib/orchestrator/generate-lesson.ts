@@ -17,6 +17,7 @@ import {
   markLessonFailed,
   saveLessonVersion,
 } from "../lesson/repository";
+import { createPersistedStudioSpec } from "../lesson/studio-state";
 import {
   falGenerateImage,
   falGenerateVideo,
@@ -685,16 +686,14 @@ export async function* generateLessonStream(input: {
       lessonId,
       title: artifact.title,
       html: artifact.html,
-      spec: {
-        ...artifact.spec,
-        studio: {
-          lesson: doc,
-          timeline: studioTimeline,
-          runId,
-          transcript: input.transcript,
-          completedAt: new Date().toISOString(),
-        },
-      } as unknown as Record<string, unknown>,
+      spec: createPersistedStudioSpec({
+        artifactSpec: artifact.spec,
+        lesson: doc,
+        timeline: studioTimeline,
+        runId,
+        transcript: input.transcript,
+        completedAt: new Date().toISOString(),
+      }),
     });
     await finishGenerationRun({ id: runId, status: "completed" });
     yield persistCompleted;

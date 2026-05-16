@@ -19,51 +19,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { VoiceSessionController } from "@/components/voice/VoiceSessionController";
 import { applyLessonPatch } from "@/lib/lesson/patches";
-import {
-  type LessonDocument,
-  type LessonNode,
-  safeParseLessonDocument,
-} from "@/lib/lesson/schema";
+import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
+import { readStudioState } from "@/lib/lesson/studio-state";
 import {
   type ProviderReadiness,
   parseStreamEventLine,
   type StudioTimelineRow,
 } from "@/lib/orchestrator/stream-events";
 import { cn } from "@/lib/utils";
-
-type StudioState = {
-  lesson: LessonDocument;
-  timeline: StudioTimelineRow[];
-  transcript?: string;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readStudioState(value: unknown): StudioState | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const studio = isRecord(value.studio) ? value.studio : null;
-  if (!studio) {
-    return null;
-  }
-  const lesson = studio.lesson;
-  const parsedLesson = safeParseLessonDocument(lesson);
-  if (!parsedLesson.success) {
-    return null;
-  }
-  const timeline = Array.isArray(studio.timeline)
-    ? (studio.timeline.filter(isRecord) as StudioTimelineRow[])
-    : [];
-  return {
-    lesson: parsedLesson.data,
-    timeline,
-    transcript:
-      typeof studio.transcript === "string" ? studio.transcript : undefined,
-  };
-}
 
 export function StudioClient({
   initialLessonId,
@@ -113,16 +76,20 @@ export function StudioClient({
           throw new Error(`Could not load lesson ${initialLessonId}`);
         }
         const payload = (await res.json()) as {
+          lesson?: { id?: string; title?: string; prompt?: string } | null;
           version?: { spec?: unknown } | null;
         };
-        const state = readStudioState(payload.version?.spec);
+        const state = readStudioState(
+          payload.version?.spec,
+          payload.lesson ?? undefined
+        );
         if (!(state && !cancelled)) {
           throw new Error("This lesson does not have saved Studio state yet.");
         }
         setLesson(state.lesson);
         setTimeline(state.timeline);
         setTranscript(state.transcript ?? state.lesson.title);
-        setSavedLessonId(state.lesson.id);
+        setSavedLessonId(payload.lesson?.id ?? state.lesson.id);
         setSelectedId(null);
       } catch (e) {
         if (!cancelled) {
