@@ -43,7 +43,7 @@ export function BlockRenderer({
       <div
         className={cn(
           "space-y-3",
-          depth > 0 && "border-border/80 border-l pl-3"
+          depth > 0 && "border-primary/25 border-l pl-3"
         )}
       >
         <div className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
@@ -69,7 +69,7 @@ export function BlockRenderer({
   if (node.type === "objectives") {
     return (
       <Card
-        className={cn(selected && "ring-2 ring-primary/40")}
+        className={cn("bg-white/86", selected && "ring-2 ring-primary/45")}
         data-node-id={node.id}
         onClick={() => onSelect(node.id)}
         size="sm"
@@ -95,7 +95,7 @@ export function BlockRenderer({
   if (node.type === "text") {
     return (
       <Card
-        className={cn(selected && "ring-2 ring-primary/40")}
+        className={cn("bg-white/86", selected && "ring-2 ring-primary/45")}
         data-node-id={node.id}
         onClick={() => onSelect(node.id)}
         size="sm"
@@ -136,7 +136,7 @@ export function BlockRenderer({
   if (node.type === "media") {
     return (
       <Card
-        className={cn(selected && "ring-2 ring-primary/40")}
+        className={cn("bg-white/86", selected && "ring-2 ring-primary/45")}
         data-node-id={node.id}
         onClick={() => onSelect(node.id)}
         size="sm"
@@ -236,7 +236,7 @@ export function BlockRenderer({
   if (node.type === "quiz") {
     return (
       <Card
-        className={cn(selected && "ring-2 ring-primary/40")}
+        className={cn("bg-white/86", selected && "ring-2 ring-primary/45")}
         data-node-id={node.id}
         onClick={() => onSelect(node.id)}
         size="sm"
@@ -253,7 +253,7 @@ export function BlockRenderer({
               <p className="font-medium text-sm">{q.stem}</p>
               {q.choices?.map((c) => (
                 <div className="text-muted-foreground text-sm" key={c}>
-                  – {c}
+                  - {c}
                 </div>
               ))}
               {selected ? (
@@ -284,7 +284,7 @@ export function BlockRenderer({
   if (node.type === "activity") {
     return (
       <Card
-        className={cn(selected && "ring-2 ring-primary/40")}
+        className={cn("bg-white/86", selected && "ring-2 ring-primary/45")}
         data-node-id={node.id}
         onClick={() => onSelect(node.id)}
         size="sm"
@@ -303,7 +303,7 @@ export function BlockRenderer({
             <div key={it.id}>
               <span className="font-medium">{it.label}</span>{" "}
               <span className="text-muted-foreground">
-                →{" "}
+                {" -> "}
                 {node.categories?.find((c) => c.id === it.categoryId)?.label ??
                   it.categoryId}
               </span>
@@ -317,7 +317,7 @@ export function BlockRenderer({
   if (node.type === "reflection") {
     return (
       <Card
-        className={cn(selected && "ring-2 ring-primary/40")}
+        className={cn("bg-white/86", selected && "ring-2 ring-primary/45")}
         data-node-id={node.id}
         onClick={() => onSelect(node.id)}
         size="sm"

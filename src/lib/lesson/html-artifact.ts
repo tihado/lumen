@@ -249,37 +249,50 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(spec.title)}</title>
   <style>
-    :root { color-scheme: dark; --gold: #ffd166; --ink: #f8fafc; --muted: #9aa8bd; --panel: rgba(8, 14, 28, .78); }
+    :root { color-scheme: dark; --gold: #ffd166; --amber: #ff9f1c; --cyan: #67e8f9; --rose: #fb7185; --ink: #f8fafc; --muted: #a9b5c8; --panel: rgba(8, 15, 31, .76); --line: rgba(172, 190, 220, .18); }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: #020617; color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .page { min-height: 100vh; background: radial-gradient(circle at 50% 0%, rgba(255, 209, 102, .2), transparent 32rem), linear-gradient(180deg, #030712 0%, #08111f 100%); }
-    header { padding: clamp(28px, 5vw, 56px) clamp(18px, 5vw, 64px) 18px; max-width: 1180px; margin: 0 auto; }
-    .kicker { color: var(--gold); font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
-    h1 { margin: 10px 0 10px; max-width: 840px; font-size: clamp(34px, 7vw, 78px); line-height: .95; letter-spacing: 0; }
-    .summary { margin: 0; max-width: 760px; color: #cbd5e1; font-size: clamp(16px, 2vw, 20px); line-height: 1.6; }
-    .experience { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 18px; max-width: 1180px; margin: 0 auto; padding: 18px clamp(18px, 5vw, 64px) 48px; }
-    .scene-wrap { position: relative; min-height: min(70vh, 680px); overflow: hidden; border: 1px solid rgba(148, 163, 184, .18); background: rgba(2, 6, 23, .72); }
+    .page { min-height: 100vh; overflow: hidden; background: radial-gradient(circle at 16% 18%, rgba(103, 232, 249, .16), transparent 24rem), radial-gradient(circle at 72% 8%, rgba(255, 159, 28, .18), transparent 30rem), linear-gradient(135deg, #020617 0%, #08111f 52%, #0d1326 100%); }
+    .page::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .34; background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px); background-size: 72px 72px; mask-image: radial-gradient(circle at 50% 36%, black, transparent 72%); }
+    header { padding: clamp(24px, 4vw, 46px) clamp(18px, 5vw, 64px) 14px; max-width: 1260px; margin: 0 auto; }
+    .kicker { color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { margin: 10px 0 10px; max-width: 840px; font-size: clamp(36px, 6vw, 76px); line-height: .94; letter-spacing: 0; text-wrap: balance; }
+    .summary { margin: 0; max-width: 760px; color: #d5deed; font-size: clamp(16px, 1.7vw, 20px); line-height: 1.6; }
+    .experience { display: grid; grid-template-columns: minmax(0, 1fr) minmax(304px, 390px); gap: 20px; max-width: 1260px; margin: 0 auto; padding: 18px clamp(18px, 5vw, 64px) 48px; }
+    .scene-wrap { position: relative; min-height: min(72vh, 720px); overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: radial-gradient(circle at 48% 43%, rgba(255, 209, 102, .09), transparent 18rem), rgba(2, 6, 23, .72); box-shadow: 0 24px 80px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255,255,255,.06); }
+    .scene-wrap::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 45%, transparent 0 36%, rgba(2, 6, 23, .2) 58%, rgba(2, 6, 23, .78) 100%), linear-gradient(120deg, rgba(103, 232, 249, .12), transparent 32%, rgba(251, 113, 133, .08)); }
+    .scene-wrap::after { content: ""; position: absolute; inset: 14px; pointer-events: none; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; }
     #solar-canvas { display: block; width: 100%; height: 100%; min-height: min(70vh, 680px); cursor: grab; }
     #solar-canvas:active { cursor: grabbing; }
-    .toolbar { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; pointer-events: none; }
-    .hint { pointer-events: none; color: #dbeafe; background: rgba(15, 23, 42, .68); border: 1px solid rgba(148, 163, 184, .18); padding: 8px 10px; font-size: 12px; }
-    button { border: 1px solid rgba(255, 255, 255, .18); background: rgba(255, 255, 255, .08); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; }
-    button:hover, button.active { border-color: rgba(255, 209, 102, .8); color: var(--gold); }
-    .reset { pointer-events: auto; }
-    aside { border: 1px solid rgba(148, 163, 184, .18); background: var(--panel); padding: 18px; min-height: 420px; }
-    .planet-title { margin: 0; font-size: 28px; line-height: 1.05; }
-    .planet-description { color: #cbd5e1; line-height: 1.55; }
-    dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; margin: 18px 0; font-size: 13px; }
+    .toolbar { position: absolute; left: 26px; right: 26px; bottom: 24px; z-index: 2; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; pointer-events: none; }
+    .hint { pointer-events: none; color: #e6f2ff; background: rgba(7, 13, 28, .72); border: 1px solid rgba(168, 184, 214, .22); border-radius: 999px; padding: 9px 13px; font-size: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter: blur(12px); }
+    button { border: 1px solid rgba(255, 255, 255, .16); border-radius: 6px; background: linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .045)); color: var(--ink); padding: 10px 13px; font: inherit; font-size: 13px; font-weight: 760; cursor: pointer; transition: transform .18s ease, border-color .18s ease, background .18s ease, color .18s ease; }
+    button:hover, button.active { border-color: rgba(255, 209, 102, .86); color: #fff6d8; background: linear-gradient(180deg, rgba(255, 209, 102, .2), rgba(103, 232, 249, .08)); transform: translateY(-1px); }
+    .reset { pointer-events: auto; min-width: 104px; }
+    aside { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: linear-gradient(180deg, rgba(10, 20, 42, .84), rgba(5, 10, 23, .78)); padding: 26px; min-height: 420px; box-shadow: 0 24px 80px rgba(0, 0, 0, .36), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(18px); }
+    aside::before { content: ""; position: absolute; top: -90px; right: -120px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgba(103, 232, 249, .18), transparent 62%); pointer-events: none; }
+    .planet-title { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1; text-wrap: balance; }
+    .planet-description { color: #d5deed; font-size: 16px; line-height: 1.65; margin: 22px 0; }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; margin: 20px 0 22px; padding: 16px 0; border-top: 1px solid rgba(172, 190, 220, .14); border-bottom: 1px solid rgba(172, 190, 220, .14); font-size: 13px; }
     dt { color: var(--muted); }
-    dd { margin: 0; text-align: right; }
-    ul { margin: 0; padding-left: 18px; color: #dbeafe; line-height: 1.55; }
-    .planet-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    dd { margin: 0; text-align: right; color: #edf5ff; font-weight: 760; }
+    ul { margin: 0; padding-left: 20px; color: #e3efff; line-height: 1.62; }
+    li::marker { color: var(--cyan); }
+    .planet-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 22px; }
     .quiz { max-width: 1180px; margin: 0 auto; padding: 0 clamp(18px, 5vw, 64px) 64px; }
-    .quiz-card { border: 1px solid rgba(148, 163, 184, .18); background: rgba(15, 23, 42, .72); padding: 20px; }
+    .quiz-card { border: 1px solid var(--line); border-radius: 8px; background: rgba(15, 23, 42, .72); padding: 20px; }
     .answer { color: var(--gold); font-weight: 700; }
     @media (max-width: 860px) {
       .experience { grid-template-columns: 1fr; }
       .scene-wrap, #solar-canvas { min-height: 520px; }
+      .planet-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+      header { padding-top: 24px; }
+      .experience { padding-left: 14px; padding-right: 14px; }
+      .toolbar { left: 18px; right: 18px; bottom: 18px; }
+      .planet-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      aside { padding: 22px; }
     }
   </style>
 </head>

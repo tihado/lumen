@@ -19,10 +19,11 @@ export default async function LessonsPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <main className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.42_0.05_180/0.045)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.04)_1px,transparent_1px)] bg-[size:42px_42px]" />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/50 px-4 py-4 shadow-sm backdrop-blur-xl">
         <div>
-          <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          <p className="font-medium text-primary text-xs uppercase tracking-wide">
             Saved lessons
           </p>
           <h1 className="font-semibold text-3xl tracking-tight">
@@ -35,7 +36,7 @@ export default async function LessonsPage() {
       </div>
 
       {error ? (
-        <Card>
+        <Card className="bg-white/82">
           <CardContent className="p-6 text-destructive text-sm">
             {error}
           </CardContent>
@@ -43,9 +44,11 @@ export default async function LessonsPage() {
       ) : null}
 
       {rows.length === 0 && !error ? (
-        <Card>
+        <Card className="bg-white/82">
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
-            <BookOpen className="size-8 text-muted-foreground" />
+            <div className="flex size-12 items-center justify-center rounded-xl bg-secondary text-primary">
+              <BookOpen className="size-7" />
+            </div>
             <p className="text-muted-foreground text-sm">
               No lessons have been saved in Postgres yet.
             </p>
@@ -58,7 +61,10 @@ export default async function LessonsPage() {
 
       <div className="grid gap-3">
         {rows.map((lesson) => (
-          <Card key={lesson.id}>
+          <Card
+            className="bg-white/82 transition-transform hover:-translate-y-0.5"
+            key={lesson.id}
+          >
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div className="min-w-0">
                 <CardTitle className="line-clamp-2 text-lg">

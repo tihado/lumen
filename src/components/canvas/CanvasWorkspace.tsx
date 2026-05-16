@@ -26,8 +26,8 @@ export function CanvasWorkspace({
   const childIds = root?.type === "section" ? root.children : [];
 
   return (
-    <Card className="min-h-0 flex-1 overflow-hidden">
-      <CardHeader className="border-border/60 border-b py-3">
+    <Card className="min-h-0 flex-1 overflow-hidden bg-white/82">
+      <CardHeader className="border-border/60 border-b bg-white/45 py-3">
         <CardTitle className="text-base">{doc.title}</CardTitle>
         <p className="text-muted-foreground text-xs">
           {doc.gradeBand ? `${doc.gradeBand} · ` : null}
@@ -37,7 +37,7 @@ export function CanvasWorkspace({
       </CardHeader>
       <CardContent className="min-h-0 flex-1 p-0">
         <ScrollArea className="h-[min(70vh,640px)]">
-          <div className="space-y-4 p-4">
+          <div className="space-y-4 bg-[linear-gradient(oklch(0.42_0.05_180/0.035)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.03)_1px,transparent_1px)] bg-[size:32px_32px] p-4">
             {childIds.map((id) => (
               <BlockRenderer
                 doc={doc}

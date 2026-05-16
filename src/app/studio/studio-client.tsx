@@ -262,10 +262,13 @@ export function StudioClient() {
   }, [router, savedLessonId]);
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="relative mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4 p-4">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.42_0.05_180/0.045)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.04)_1px,transparent_1px)] bg-[size:40px_40px]" />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/50 px-4 py-3 shadow-sm backdrop-blur-xl">
         <div>
-          <h1 className="font-semibold text-xl tracking-tight">Studio</h1>
+          <h1 className="font-semibold text-primary text-xl tracking-tight">
+            Studio
+          </h1>
           <p className="text-muted-foreground text-sm">
             Generate with visible provider steps, then publish a student
             preview.
@@ -301,7 +304,7 @@ export function StudioClient() {
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,340px)_1fr]">
         <div className="flex min-h-0 flex-col gap-4">
-          <Card>
+          <Card className="bg-white/82">
             <CardHeader>
               <CardTitle className="text-base">Input</CardTitle>
               <CardDescription>
@@ -342,7 +345,7 @@ export function StudioClient() {
             </CardContent>
           </Card>
 
-          <Card className="min-h-0 flex-1 overflow-hidden">
+          <Card className="min-h-0 flex-1 overflow-hidden bg-white/82">
             <CardHeader className="py-3">
               <CardTitle className="text-base">Provider timeline</CardTitle>
               <CardDescription>
@@ -360,7 +363,7 @@ export function StudioClient() {
                   ) : (
                     timeline.map((row) => (
                       <div
-                        className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs"
+                        className="rounded-lg border border-border/70 bg-white/58 px-3 py-2 text-xs shadow-sm"
                         key={row.key}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -425,7 +428,7 @@ export function StudioClient() {
               selectedId={selectedId}
             />
           ) : (
-            <Card className="flex flex-1 items-center justify-center p-8">
+            <Card className="flex flex-1 items-center justify-center bg-white/75 p-8">
               <p className="text-center text-muted-foreground text-sm">
                 No lesson on canvas yet. Generate from the left panel.
               </p>
