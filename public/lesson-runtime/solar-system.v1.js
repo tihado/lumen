@@ -61,6 +61,106 @@ runtimeStyles.textContent = `
     box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
     backdrop-filter: blur(12px);
   }
+  [data-runtime="solar-system"] .planet-popover {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 4;
+    width: min(310px, calc(100% - 28px));
+    border: 1px solid rgba(255, 209, 102, .38);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(13, 25, 51, .94), rgba(4, 10, 25, .92));
+    box-shadow: 0 18px 46px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255,255,255,.09);
+    color: #f8fafc;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate3d(var(--popup-x, 0), var(--popup-y, 0), 0) scale(.96);
+    transform-origin: var(--origin-x, 50%) var(--origin-y, 100%);
+    transition: opacity .18s ease, transform .18s ease;
+    backdrop-filter: blur(16px);
+  }
+  [data-runtime="solar-system"] .planet-popover[data-open="true"] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate3d(var(--popup-x, 0), var(--popup-y, 0), 0) scale(1);
+  }
+  [data-runtime="solar-system"] .planet-popover[data-side="below"] {
+    transform-origin: var(--origin-x, 50%) 0%;
+  }
+  [data-runtime="solar-system"] .planet-popover-arrow {
+    position: absolute;
+    left: var(--arrow-x, 50%);
+    top: 100%;
+    width: 14px;
+    height: 14px;
+    border-right: 1px solid rgba(255, 209, 102, .38);
+    border-bottom: 1px solid rgba(255, 209, 102, .38);
+    background: rgba(4, 10, 25, .94);
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+  [data-runtime="solar-system"] .planet-popover[data-side="below"] .planet-popover-arrow {
+    top: 0;
+    border: 0;
+    border-left: 1px solid rgba(255, 209, 102, .38);
+    border-top: 1px solid rgba(255, 209, 102, .38);
+    background: rgba(13, 25, 51, .94);
+  }
+  [data-runtime="solar-system"] .planet-popover-body {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 10px;
+    padding: 15px 16px 16px;
+  }
+  [data-runtime="solar-system"] .planet-popover-kicker {
+    color: #ffd166;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  [data-runtime="solar-system"] .planet-popover-title {
+    margin: 0;
+    padding-right: 24px;
+    font-size: 24px;
+    line-height: 1;
+  }
+  [data-runtime="solar-system"] .planet-popover-description {
+    margin: 0;
+    color: #dbeafe;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  [data-runtime="solar-system"] .planet-popover-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 7px 12px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(172, 190, 220, .16);
+    font-size: 11px;
+  }
+  [data-runtime="solar-system"] .planet-popover-meta span:nth-child(odd) {
+    color: #a9b5c8;
+  }
+  [data-runtime="solar-system"] .planet-popover-meta span:nth-child(even) {
+    color: #edf5ff;
+    font-weight: 760;
+    text-align: right;
+  }
+  [data-runtime="solar-system"] .planet-popover-close {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    padding: 0;
+    border-color: rgba(255, 255, 255, .16);
+    border-radius: 999px;
+    line-height: 1;
+  }
   aside {
     position: relative;
     overflow: hidden;
@@ -140,6 +240,9 @@ runtimeStyles.textContent = `
     }
     aside {
       padding: 22px;
+    }
+    [data-runtime="solar-system"] .planet-popover {
+      width: min(286px, calc(100% - 22px));
     }
   }
 `;
@@ -690,6 +793,35 @@ const periodEl = document.getElementById("planet-period");
 const factsEl = document.getElementById("planet-facts");
 const listEl = document.getElementById("planet-list");
 const resetBtn = document.getElementById("reset-view");
+const popupPosition = new THREE.Vector3();
+const popupScreenPosition = new THREE.Vector3();
+const planetPopup = document.createElement("div");
+planetPopup.className = "planet-popover";
+planetPopup.setAttribute("role", "status");
+planetPopup.setAttribute("aria-live", "polite");
+planetPopup.dataset.open = "false";
+planetPopup.innerHTML = `
+  <div class="planet-popover-arrow" aria-hidden="true"></div>
+  <div class="planet-popover-body">
+    <button class="planet-popover-close" type="button" aria-label="Close popup">x</button>
+    <span class="planet-popover-kicker">Selected body</span>
+    <h3 class="planet-popover-title"></h3>
+    <p class="planet-popover-description"></p>
+    <div class="planet-popover-meta">
+      <span>Diameter</span><span data-popup-diameter></span>
+      <span>Distance</span><span data-popup-distance></span>
+      <span>Orbit</span><span data-popup-period></span>
+    </div>
+  </div>
+`;
+root.appendChild(planetPopup);
+
+const popupTitleEl = planetPopup.querySelector(".planet-popover-title");
+const popupDescriptionEl = planetPopup.querySelector(".planet-popover-description");
+const popupDiameterEl = planetPopup.querySelector("[data-popup-diameter]");
+const popupDistanceEl = planetPopup.querySelector("[data-popup-distance]");
+const popupPeriodEl = planetPopup.querySelector("[data-popup-period]");
+const popupCloseBtn = planetPopup.querySelector(".planet-popover-close");
 
 function setActiveButton() {
   for (const button of listEl?.querySelectorAll("button") || []) {
@@ -723,6 +855,85 @@ function updateDetails(body) {
   }
 }
 
+function updatePopupDetails(body) {
+  if (popupTitleEl) {
+    popupTitleEl.textContent = body.name;
+  }
+  if (popupDescriptionEl) {
+    popupDescriptionEl.textContent = body.description;
+  }
+  if (popupDiameterEl) {
+    popupDiameterEl.textContent = body.diameter;
+  }
+  if (popupDistanceEl) {
+    popupDistanceEl.textContent = body.distanceFromSun;
+  }
+  if (popupPeriodEl) {
+    popupPeriodEl.textContent = body.orbitalPeriod;
+  }
+}
+
+function showPlanetPopup(body) {
+  updatePopupDetails(body);
+  planetPopup.dataset.open = "true";
+}
+
+function hidePlanetPopup() {
+  planetPopup.dataset.open = "false";
+}
+
+function getSelectedObject() {
+  if (selectedType === "sun") {
+    return sun;
+  }
+  if (selectedType === "planet" && selectedId) {
+    return planetMeshes.get(selectedId) || null;
+  }
+  return null;
+}
+
+function updatePopupPosition() {
+  if (planetPopup.dataset.open !== "true") {
+    return;
+  }
+
+  const selectedObject = getSelectedObject();
+  if (!selectedObject) {
+    hidePlanetPopup();
+    return;
+  }
+
+  const rect = root.getBoundingClientRect();
+  selectedObject.getWorldPosition(popupPosition);
+  popupScreenPosition.copy(popupPosition).project(camera);
+
+  if (popupScreenPosition.z < -1 || popupScreenPosition.z > 1) {
+    planetPopup.dataset.open = "false";
+    return;
+  }
+
+  const anchorX = ((popupScreenPosition.x + 1) / 2) * rect.width;
+  const anchorY = ((-popupScreenPosition.y + 1) / 2) * rect.height;
+  const popupWidth = planetPopup.offsetWidth || 310;
+  const popupHeight = planetPopup.offsetHeight || 170;
+  const margin = 12;
+  const gap = 42;
+  const placeBelow = anchorY - popupHeight - gap < margin;
+  const minX = margin;
+  const maxX = Math.max(minX, rect.width - popupWidth - margin);
+  const left = Math.min(Math.max(anchorX - popupWidth / 2, minX), maxX);
+  const top = placeBelow
+    ? Math.min(anchorY + gap, Math.max(margin, rect.height - popupHeight - margin))
+    : Math.max(margin, anchorY - popupHeight - gap);
+  const arrowX = Math.min(Math.max(anchorX - left, 18), popupWidth - 18);
+
+  planetPopup.dataset.side = placeBelow ? "below" : "above";
+  planetPopup.style.setProperty("--popup-x", `${left}px`);
+  planetPopup.style.setProperty("--popup-y", `${top}px`);
+  planetPopup.style.setProperty("--arrow-x", `${arrowX}px`);
+  planetPopup.style.setProperty("--origin-x", `${arrowX}px`);
+}
+
 function selectSun() {
   selectedId = sunInfo.id;
   selectedType = "sun";
@@ -732,6 +943,7 @@ function selectSun() {
   selectedRing.scale.setScalar(sunInfo.radius * 1.85);
   selectedRing.position.set(0, 0, 0);
   updateDetails(sunInfo);
+  showPlanetPopup(sunInfo);
   setActiveButton();
 }
 
@@ -747,6 +959,7 @@ function selectPlanet(id) {
   selectedRing.material.opacity = 0.78;
   selectedRing.scale.setScalar(planet.radius * 1.75);
   updateDetails(planet);
+  showPlanetPopup(planet);
   desiredTarget.copy(mesh.position);
   setActiveButton();
 }
@@ -777,6 +990,7 @@ function resetView() {
     factsEl.innerHTML =
       "<li>The solar system includes the Sun, eight planets, and many smaller bodies.</li>";
   }
+  hidePlanetPopup();
   setActiveButton();
 }
 
@@ -799,6 +1013,7 @@ if (listEl) {
 }
 
 resetBtn?.addEventListener("click", resetView);
+popupCloseBtn?.addEventListener("click", hidePlanetPopup);
 
 let dragging = false;
 let lastX = 0;
@@ -919,6 +1134,7 @@ function animate(time) {
   }
 
   updateCamera();
+  updatePopupPosition();
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
