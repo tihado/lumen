@@ -22,7 +22,7 @@ These partners power the hackathon stack.
 | -------- | ------------- | --------------------- |
 | [**OpenAI**](https://openai.com) | Frontier models — structured lesson JSON, utilities via AI SDK (`@ai-sdk/openai`), `/api/openai` | `OPENAI_API_KEY`, optional `OPENAI_MODEL`, `OPENAI_CODE_MODEL` |
 | [**Tavily**](https://www.tavily.com/) | Real-time search and excerpts for grounded lesson content | `TAVILY_API_KEY` → `src/lib/orchestrator/providers/tavily.ts` |
-| [**Pioneer**](https://pioneer.ai/) by [**Fastino**](https://fastino.ai/) | Entity / schema extraction (`POST …/extract`) | `PIONEER_API_URL`, optional `PIONEER_API_KEY` → `src/lib/orchestrator/providers/pioneer.ts` |
+| [**Pioneer**](https://pioneer.ai/) by [**Fastino**](https://fastino.ai/) | Entity / schema extraction (`POST …/inference`) | `PIONEER_API_URL`, `PIONEER_API_KEY`, optional `PIONEER_MODEL_ID` → `src/lib/orchestrator/providers/pioneer.ts` |
 | [**fal**](https://fal.ai/) | Generative **images** and **videos** for lesson media | `FAL_KEY` or `FAL_API_KEY`, optional `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` → `src/lib/orchestrator/providers/fal.ts` |
 | [**SLNG**](https://slng.ai/) | Global voice infrastructure — **STT** + **TTS** on the server | `SLNG_API_KEY` + `SLNG_API_BASE_URL`, optional `SLNG_STT_MODEL`, `SLNG_TTS_MODEL` → `src/lib/orchestrator/providers/slng.ts` |
 
@@ -119,7 +119,7 @@ When **S3** env vars are set, generated **fal** assets and **SLNG** audio can be
    | `DATABASE_URL` | **Required** for DB-backed flows (`getDb()` throws if missing) |
    | `OPENAI_API_KEY` | Live structured lesson generation |
    | `TAVILY_API_KEY` | Live web search excerpts |
-   | `PIONEER_API_URL` (+ optional `PIONEER_API_KEY`) | Live entity extraction |
+   | `PIONEER_API_URL` + `PIONEER_API_KEY` | Live entity extraction (`PIONEER_MODEL_ID` optional) |
    | `FAL_KEY` or `FAL_API_KEY` | Live image/video |
    | `SLNG_API_KEY` + `SLNG_API_BASE_URL` | Live STT/TTS |
    | `S3_*`, `AWS_*` | Optional media mirroring |

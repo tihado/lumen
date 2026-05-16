@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAppEnv, getDatabaseAvailability } from "@/lib/env";
 import { listLessons } from "@/lib/lesson/repository";
 import { cn } from "@/lib/utils";
+import { DeleteLessonButton } from "./delete-lesson-button";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,6 +113,10 @@ export default async function LessonsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                <DeleteLessonButton
+                  lessonId={lesson.id}
+                  lessonTitle={lesson.title}
+                />
                 <Link
                   className={cn(
                     buttonVariants({ size: "sm", variant: "ghost" })

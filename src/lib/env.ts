@@ -14,6 +14,7 @@ const envSchema = z.object({
   FAL_VIDEO_MODEL: z.string().optional(),
   PIONEER_API_URL: z.string().url().optional(),
   PIONEER_API_KEY: z.string().optional(),
+  PIONEER_MODEL_ID: z.string().optional(),
   SLNG_API_KEY: z.string().optional(),
   SLNG_API_BASE_URL: z.string().url().optional(),
   SLNG_TTS_MODEL: z.string().optional(),
@@ -66,6 +67,7 @@ function readRawEnv(): Record<string, string | undefined> {
     FAL_VIDEO_MODEL: optionalEnv(process.env.FAL_VIDEO_MODEL),
     PIONEER_API_URL: optionalEnv(process.env.PIONEER_API_URL),
     PIONEER_API_KEY: optionalEnv(process.env.PIONEER_API_KEY),
+    PIONEER_MODEL_ID: optionalEnv(process.env.PIONEER_MODEL_ID),
     SLNG_API_KEY: optionalEnv(process.env.SLNG_API_KEY),
     SLNG_API_BASE_URL: optionalEnv(process.env.SLNG_API_BASE_URL),
     SLNG_TTS_MODEL: optionalEnv(process.env.SLNG_TTS_MODEL),
@@ -104,7 +106,7 @@ export function getProviderReadiness(
     llm: Boolean(env.OPENAI_API_KEY),
     tavily: Boolean(env.TAVILY_API_KEY),
     fal: Boolean(env.FAL_API_KEY ?? env.FAL_KEY),
-    pioneer: Boolean(env.PIONEER_API_URL),
+    pioneer: Boolean(env.PIONEER_API_URL && env.PIONEER_API_KEY),
     slng: Boolean(env.SLNG_API_KEY && env.SLNG_API_BASE_URL),
   };
 }

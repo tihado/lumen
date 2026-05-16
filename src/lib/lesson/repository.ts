@@ -163,3 +163,12 @@ export async function listLessons() {
   const db = getDb();
   return db.select().from(lessons).orderBy(desc(lessons.createdAt)).limit(50);
 }
+
+export async function deleteLesson(lessonId: string) {
+  const db = getDb();
+  const rows = await db
+    .delete(lessons)
+    .where(eq(lessons.id, lessonId))
+    .returning({ id: lessons.id });
+  return rows[0] ?? null;
+}

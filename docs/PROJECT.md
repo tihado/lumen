@@ -357,6 +357,7 @@ sequenceDiagram
 
 ### 7.4 Pioneer / GLiNER2 integration
 
+- **Implementation references:** [Pioneer REST API overview](https://docs.pioneer.ai/api-reference/overview) and [fastino-ai/GLiNER2](https://github.com/fastino-ai/GLiNER2).
 - **Input:** bounded text (teacher transcript + selected Tavily excerpts), not the whole web.
 - **Output contract:** map to **slots** in your schema (e.g., `VocabularyTerm[]`, `KeyConcept[]`, `Misconception[]`).
 - **Failure mode:** if extraction is thin, fall back to LLM-only structuring but **flag** lower confidence in UI.

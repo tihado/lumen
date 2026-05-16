@@ -1,5 +1,3 @@
-import { createFal } from "@ai-sdk/fal";
-import { generateImage } from "ai";
 import type { AppEnv } from "@/lib/env";
 
 export type FalImageResult = {
@@ -31,12 +29,6 @@ type FalVideoResponse = {
   videos?: FalFile[];
 };
 
-function optionalNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -45,42 +37,68 @@ function falApiKey(env: AppEnv) {
   return env.FAL_API_KEY ?? env.FAL_KEY;
 }
 
-function dataUrl(file: { base64: string; mediaType: string }) {
-  return `data:${file.mediaType};base64,${file.base64}`;
-}
-
-function firstFalImageMetadata(providerMetadata: unknown) {
-  const image = (
-    providerMetadata as {
-      fal?: { images?: Record<string, unknown>[] };
-    }
-  ).fal?.images?.[0];
-  return {
-    width: optionalNumber(image?.width),
-    height: optionalNumber(image?.height),
-    mime:
-      typeof image?.contentType === "string" ? image.contentType : undefined,
-  };
-}
-
-function imageGenerationOptions(model: string) {
+function imageRequestBody(prompt: string, model: string) {
   if (model === "fal-ai/nano-banana-2") {
     return {
-      outputFormat: "png",
-      safetyTolerance: "4",
-      syncMode: false,
+      prompt,
+      image_size: "landscape_4_3",
+      num_images: 1,
+      output_format: "png",
+      safety_tolerance: "4",
+      sync_mode: false,
       resolution: "1K",
       limit_generations: true,
       enable_web_search: false,
     };
   }
 
-  return {};
+  return {
+    prompt,
+    image_size: "landscape_4_3",
+    num_images: 1,
+  };
 }
 
-/**
- * Generates a fal image through the AI SDK. Override model with FAL_IMAGE_MODEL.
- */
+function parseFalImageResponse(data: unknown): FalImageResult {
+  const record =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const image =
+    Array.isArray(record.images) && record.images[0]
+      ? record.images[0]
+      : record.image;
+  const imageRecord =
+    image && typeof image === "object"
+      ? (image as Record<string, unknown>)
+      : {};
+  const url = typeof imageRecord.url === "string" ? imageRecord.url : undefined;
+  if (!url) {
+    throw new Error("fal image response missing image.url");
+  }
+  const mime =
+    typeof imageRecord.content_type === "string"
+      ? imageRecord.content_type
+      : typeof imageRecord.contentType === "string"
+        ? imageRecord.contentType
+        : "image/png";
+  const width =
+    typeof imageRecord.width === "number" && Number.isFinite(imageRecord.width)
+      ? imageRecord.width
+      : undefined;
+  const height =
+    typeof imageRecord.height === "number" &&
+    Number.isFinite(imageRecord.height)
+      ? imageRecord.height
+      : undefined;
+
+  return {
+    url,
+    mime,
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+  };
+}
+
+/** Generates a fal image and keeps the provider-hosted URL for persisted HTML. */
 export async function falGenerateImage(
   prompt: string,
   env: AppEnv
@@ -95,33 +113,25 @@ export async function falGenerateImage(
     model,
     promptLength: prompt.length,
   });
-  const provider = createFal({ apiKey: key });
-  const options = imageGenerationOptions(model);
-  const result = await generateImage({
-    model: provider.image(model),
-    prompt,
-    n: 1,
-    aspectRatio: "4:3",
-    providerOptions: {
-      fal: options,
+  const res = await fetch(`https://fal.run/${model}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${key}`,
+      "Content-Type": "application/json",
+      "X-Fal-Request-Timeout": "120",
     },
+    body: JSON.stringify(imageRequestBody(prompt, model)),
   });
-  const metadata = firstFalImageMetadata(result.providerMetadata);
-  const width = metadata.width;
-  const height = metadata.height;
+  const result = parseFalImageResponse(
+    await readJsonResponse<unknown>(res, "image")
+  );
   console.info("[fal] image ready", {
     model,
-    width,
-    height,
-    warnings: result.warnings.length,
+    width: result.width,
+    height: result.height,
     durationMs: Date.now() - startedAt,
   });
-  return {
-    url: dataUrl(result.image),
-    mime: metadata.mime ?? result.image.mediaType,
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
-  };
+  return result;
 }
 
 export function fallbackFalImage(topic: string): FalImageResult {

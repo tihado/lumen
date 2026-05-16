@@ -19,14 +19,8 @@ describe("falGenerateImage", () => {
   });
 
   it("uses the Nano Banana 2 input schema and omits null dimensions", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === "https://example.com/generated.png") {
-        return new Response(new Uint8Array([137, 80, 78, 71]), {
-          headers: { "content-type": "image/png" },
-        });
-      }
-      return Response.json({
+    const fetchMock = vi.fn(async () =>
+      Response.json({
         images: [
           {
             url: "https://example.com/generated.png",
@@ -36,8 +30,8 @@ describe("falGenerateImage", () => {
           },
         ],
         description: "",
-      });
-    });
+      })
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await falGenerateImage(
@@ -67,7 +61,7 @@ describe("falGenerateImage", () => {
       enable_web_search: false,
     });
     expect(result).toEqual({
-      url: "data:image/png;base64,iVBORw==",
+      url: "https://example.com/generated.png",
       mime: "image/png",
     });
   });
