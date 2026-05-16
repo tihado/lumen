@@ -35,6 +35,7 @@ import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
 import { readStudioState } from "@/lib/lesson/studio-state";
 import {
   parseStreamEventLine,
+  type StreamEvent,
   type StudioTimelineRow,
 } from "@/lib/orchestrator/stream-events";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,16 @@ import { cn } from "@/lib/utils";
 type LiveTimelineRow = Omit<StudioTimelineRow, "status"> & {
   status: StudioTimelineRow["status"] | "running";
 };
+
+function waitForTrailPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(resolve, 450);
+      });
+    });
+  });
+}
 
 export function StudioClient({
   databaseAvailability,
@@ -196,52 +207,62 @@ export function StudioClient({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      const handleStreamEvent = (ev: StreamEvent) => {
+        if (ev.type === "provider_started") {
+          pushTimeline({
+            key: ev.stepId,
+            provider: ev.provider,
+            label: ev.label,
+            status: "started",
+          });
+          scheduleRunningTransition(ev.stepId);
+        }
+        if (ev.type === "provider_completed") {
+          clearRunningTimer(ev.stepId);
+          pushTimeline({
+            key: ev.stepId,
+            provider: ev.provider,
+            label: "",
+            status: "completed",
+            detail: ev.detail,
+            usedFallback: ev.usedFallback,
+          });
+        }
+        if (ev.type === "lesson_snapshot") {
+          setLesson(ev.lesson);
+        }
+        if (ev.type === "run_failed") {
+          setError(ev.message);
+        }
+        if (ev.type === "run_completed") {
+          completedLessonId = ev.lessonId;
+          setSavedLessonId(ev.lessonId);
+        }
+      };
+      const handleStreamLine = (line: string) => {
+        const ev = parseStreamEventLine(line);
+        if (ev) {
+          handleStreamEvent(ev);
+        }
+      };
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
+          buffer += decoder.decode();
+          for (const line of buffer.split("\n")) {
+            handleStreamLine(line);
+          }
           break;
         }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
-          const ev = parseStreamEventLine(line);
-          if (!ev) {
-            continue;
-          }
-          if (ev.type === "provider_started") {
-            pushTimeline({
-              key: ev.stepId,
-              provider: ev.provider,
-              label: ev.label,
-              status: "started",
-            });
-            scheduleRunningTransition(ev.stepId);
-          }
-          if (ev.type === "provider_completed") {
-            clearRunningTimer(ev.stepId);
-            pushTimeline({
-              key: ev.stepId,
-              provider: ev.provider,
-              label: "",
-              status: "completed",
-              detail: ev.detail,
-              usedFallback: ev.usedFallback,
-            });
-          }
-          if (ev.type === "lesson_snapshot") {
-            setLesson(ev.lesson);
-          }
-          if (ev.type === "run_failed") {
-            setError(ev.message);
-          }
-          if (ev.type === "run_completed") {
-            completedLessonId = ev.lessonId;
-            setSavedLessonId(ev.lessonId);
-          }
+          handleStreamLine(line);
         }
       }
       if (completedLessonId) {
+        await waitForTrailPaint();
         router.push(`/lesson/${completedLessonId}`);
       }
     } catch (e) {

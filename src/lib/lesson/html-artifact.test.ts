@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { LessonPlan } from "@/lib/orchestrator/providers/llm";
 import {
   createSandboxedLessonArtifact,
+  reviewSandboxedLessonArtifact,
   validateSandboxedLessonHtml,
+  validateSandboxedLessonThemeCss,
 } from "./html-artifact";
 import { slugifyLessonTitle } from "./slug";
 
@@ -219,6 +221,34 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).toContain("photosynthesis.png");
     expect(artifact.html).toContain("photosynthesis.mp4");
     expect(artifact.html).toContain("Ready");
+    expect(artifact.html).toContain("Follow the trail");
+    expect(artifact.html).toContain('"student"');
+    expect(artifact.html).not.toContain("Teacher says");
+    expect(artifact.html).not.toContain("Teacher notes");
+    expect(artifact.html).not.toContain("Facilitation moves");
+    expect(artifact.html).not.toContain("teacherNarration");
+    expect(artifact.html).not.toContain("teacherTips");
+    expect(artifact.html).not.toContain(
+      "Ask students what they notice in the night sky."
+    );
+  });
+
+  it("embeds a topic-specific generated theme for static lessons", () => {
+    const artifact = createSandboxedLessonArtifact({
+      prompt: "I want to learn about photosynthesis",
+      plan: { ...plan, title: "Photosynthesis" },
+      themeCss: `
+.lesson-page { background: linear-gradient(135deg, #f0fdf4, #e0f2fe); }
+.quiz-card, .activity-card { min-height: 280px; box-shadow: 0 24px 64px rgba(22, 101, 52, .18); }
+[data-quiz-choice], [data-classify-choice] { min-height: 72px; border-color: #16a34a; }
+`.trim(),
+      runtimeScript:
+        "document.querySelector('[data-quiz-feedback]').textContent = 'Ready';",
+    });
+
+    expect(artifact.html).toContain('id="lesson-theme-style"');
+    expect(artifact.html).toContain("min-height: 72px");
+    expect(reviewSandboxedLessonArtifact(artifact).passed).toBe(true);
   });
 
   it("rejects unsupported scripts and inline handlers", () => {
@@ -233,6 +263,12 @@ describe("sandboxed lesson HTML", () => {
         '<!doctype html><main data-runtime="solar-system"></main><script src="https://example.com/x.js"></script>'
       )
     ).toThrow(/Unsupported script/);
+
+    expect(() =>
+      validateSandboxedLessonThemeCss(
+        ".lesson-page { background-image: url('https://example.com/bg.png'); }"
+      )
+    ).toThrow(/external or executable/);
   });
 
   it("creates stable slugs for punctuated lesson titles", () => {

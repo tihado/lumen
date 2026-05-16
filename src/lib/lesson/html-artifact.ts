@@ -2,8 +2,10 @@ import { z } from "zod";
 import type { LessonPlan } from "@/lib/orchestrator/providers/llm";
 
 const MAX_HTML_LENGTH = 180_000;
+const MAX_THEME_CSS_LENGTH = 30_000;
 const SOLAR_RUNTIME_SRC = "/lesson-runtime/solar-system.v1.js";
 const EMBEDDED_RUNTIME_SCRIPT_ID = "lesson-runtime-script";
+const THEME_STYLE_ID = "lesson-theme-style";
 
 const planetSchema = z.object({
   id: z.string(),
@@ -336,6 +338,10 @@ function scriptForHtml(value: string) {
   return value.replace(/<\/script/gi, "<\\/script");
 }
 
+function styleForHtml(value: string) {
+  return value.replace(/<\/style/gi, "<\\/style");
+}
+
 function isSolarSystemPrompt(prompt: string) {
   const lower = prompt.toLowerCase();
   return lower.includes("solar system");
@@ -345,6 +351,7 @@ export function createSandboxedLessonArtifact(input: {
   prompt: string;
   plan: LessonPlan;
   runtimeScript?: string;
+  themeCss?: string;
   media?: StaticLessonMedia;
   schemaData?: StaticLessonSchemaData;
 }): SandboxedLessonArtifact {
@@ -387,6 +394,7 @@ export function createSandboxedLessonArtifact(input: {
           input.plan,
           spec,
           input.runtimeScript,
+          input.themeCss,
           input.media
         );
   validateSandboxedLessonHtml(html);
@@ -519,8 +527,13 @@ function createStaticLessonHtml(
   plan: LessonPlan,
   spec: SandboxedLessonSpec,
   runtimeScript?: string,
+  themeCss?: string,
   media?: StaticLessonMedia
 ) {
+  const safeThemeCss = themeCss?.trim();
+  if (safeThemeCss) {
+    validateSandboxedLessonThemeCss(safeThemeCss);
+  }
   const mediaItems: StaticLessonMediaItem[] =
     media?.assets ??
     [
@@ -530,7 +543,22 @@ function createStaticLessonHtml(
     ].filter((item) => item !== null);
   const runtimeData = {
     ...spec,
-    plan,
+    student: {
+      title: plan.title,
+      summary: plan.hookBody,
+      objectives: plan.objectives,
+      keyVocabulary: plan.keyVocabulary,
+      explanationSections: plan.explanationSections,
+      workedExample: plan.workedExample,
+      exploreSteps: plan.lectureScript.map((item) => ({
+        segment: item.segment,
+        title: item.title,
+        action: item.studentAction,
+      })),
+      activity: plan.activity,
+      quiz: plan.quiz,
+      reflectionPrompt: plan.reflectionPrompt,
+    },
     media: {
       assets: mediaItems,
     },
@@ -551,11 +579,12 @@ function createStaticLessonHtml(
     h1, h2, h3, p { margin-top: 0; }
     h1, h2, h3, .kicker { letter-spacing: 0; }
     p, li { line-height: 1.65; }
-    button { border: 1px solid rgba(23, 32, 51, .18); border-radius: 6px; background: #fffdf6; color: var(--ink); cursor: pointer; font: inherit; font-weight: 760; padding: 10px 12px; transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease; }
+    button { min-height: 48px; border: 1px solid rgba(23, 32, 51, .18); border-radius: 6px; background: #fffdf6; color: var(--ink); cursor: pointer; font: inherit; font-weight: 760; padding: 12px 14px; transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease; }
     button:hover { border-color: var(--teal); transform: translateY(-1px); }
     button.selected { border-color: var(--teal); background: var(--mint); color: #063f3d; }
     button.correct, [data-quiz-choice].is-correct { border-color: #198754; background: #dff7e8; color: #0b5132; }
     button.wrong, [data-quiz-choice].is-wrong { border-color: #b42338; background: #ffe4e8; color: #7a1021; }
+    [data-quiz-choice], [data-classify-choice] { flex: 1 1 170px; min-height: 58px; text-align: left; }
     .kicker { color: var(--teal); font-size: 12px; text-transform: uppercase; font-weight: 860; }
     .lesson-hero { position: relative; min-height: 520px; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(300px, .88fr); gap: 32px; align-items: end; max-width: 1240px; margin: 0 auto; padding: 64px 28px 44px; }
     .lesson-hero::before { content: ""; position: absolute; inset: 24px 18px; z-index: -1; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: linear-gradient(130deg, rgba(255, 255, 255, .66), rgba(255, 255, 255, .28)), repeating-linear-gradient(135deg, rgba(0, 109, 104, .1) 0 2px, transparent 2px 18px); box-shadow: 0 30px 90px rgba(23, 32, 51, .16); }
@@ -572,7 +601,7 @@ function createStaticLessonHtml(
     .band-heading p { margin-bottom: 0; color: var(--muted); }
     .lesson-copy { white-space: pre-wrap; line-height: 1.72; }
     .objective-list { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
-    .objective-list li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; border: 1px solid rgba(0, 109, 104, .16); border-radius: 8px; background: linear-gradient(135deg, rgba(215, 238, 231, .78), rgba(255, 253, 246, .9)); padding: 12px; }
+    .objective-list li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; min-height: 78px; border: 1px solid rgba(0, 109, 104, .16); border-radius: 8px; background: linear-gradient(135deg, rgba(215, 238, 231, .78), rgba(255, 253, 246, .9)); padding: 12px; }
     .objective-list button { height: 30px; width: 30px; padding: 0; line-height: 1; border-radius: 999px; }
     .objective-list button.is-complete { background: var(--teal); border-color: var(--teal); color: #fff; }
     .media-showcase { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
@@ -580,14 +609,14 @@ function createStaticLessonHtml(
     .media-shell img, .media-shell video { display: block; width: 100%; max-height: 480px; object-fit: contain; background: #111827; }
     .media-shell audio { width: 100%; padding: 16px; background: #fffdf6; }
     figcaption { border-top: 1px solid rgba(255, 255, 255, .14); padding: 12px 14px; color: #e7edf8; font-size: 13px; line-height: 1.5; }
-    .talk-track { display: grid; gap: 14px; }
-    .script-beat { display: grid; grid-template-columns: 56px 1fr; gap: 16px; align-items: start; border: 1px solid rgba(23, 32, 51, .15); border-left: 5px solid var(--iris); border-radius: 8px; background: linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(231, 238, 255, .72)); padding: 18px; }
-    .script-beat:nth-child(2n) { border-left-color: var(--coral); background: linear-gradient(135deg, rgba(255, 247, 231, .94), rgba(255, 229, 233, .7)); }
-    .script-beat:nth-child(3n) { border-left-color: var(--leaf); background: linear-gradient(135deg, rgba(246, 252, 232, .94), rgba(215, 238, 231, .74)); }
+    .explore-track { display: grid; gap: 14px; }
+    .explore-beat { display: grid; grid-template-columns: 56px 1fr; gap: 16px; align-items: start; border: 1px solid rgba(23, 32, 51, .15); border-left: 5px solid var(--iris); border-radius: 8px; background: linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(231, 238, 255, .72)); padding: 18px; }
+    .explore-beat:nth-child(2n) { border-left-color: var(--coral); background: linear-gradient(135deg, rgba(255, 247, 231, .94), rgba(255, 229, 233, .7)); }
+    .explore-beat:nth-child(3n) { border-left-color: var(--leaf); background: linear-gradient(135deg, rgba(246, 252, 232, .94), rgba(215, 238, 231, .74)); }
     .beat-number { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: var(--night); color: #fff; font-weight: 860; }
-    .script-beat h3 { margin-bottom: 8px; font-size: 20px; }
+    .explore-beat h3 { margin-bottom: 8px; font-size: 20px; }
     .concept-grid { display: grid; grid-template-columns: minmax(250px, .7fr) minmax(0, 1.3fr); gap: 20px; align-items: start; }
-    .vocab-panel, .example-panel, .teacher-notes, .reflection-panel { border-radius: 8px; padding: 22px; }
+    .vocab-panel, .example-panel, .next-challenge, .reflection-panel { border-radius: 8px; padding: 22px; }
     .vocab-panel { border: 1px solid rgba(0, 109, 104, .18); background: linear-gradient(180deg, rgba(215, 238, 231, .92), rgba(255, 253, 246, .84)); }
     .vocab-cloud { display: grid; gap: 12px; padding: 0; margin: 0; list-style: none; }
     .vocab-cloud li { border: 1px solid rgba(0, 109, 104, .18); border-radius: 8px; background: rgba(255, 253, 246, .78); padding: 13px; }
@@ -599,17 +628,17 @@ function createStaticLessonHtml(
     .example-panel .kicker { color: #f8c76a; }
     .example-panel p { color: #dce6f5; }
     .activity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; padding: 0; margin: 20px 0 0; list-style: none; }
-    .activity-card { border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .92), rgba(255, 244, 217, .76)); padding: 16px; }
+    .activity-card { display: grid; align-content: space-between; min-height: 220px; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .92), rgba(255, 244, 217, .76)); padding: 18px; }
     .choice-row, .choices { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
     [data-classify-result], [data-quiz-feedback] { min-height: 24px; margin: 12px 0 0; color: #263244; font-weight: 760; }
     .quiz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-    .quiz-card { display: grid; align-content: start; border: 1px solid rgba(23, 32, 51, .15); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .94), rgba(235, 242, 255, .8)); padding: 18px; box-shadow: 0 16px 44px rgba(23, 32, 51, .12); }
+    .quiz-card { display: grid; align-content: start; min-height: 250px; border: 1px solid rgba(23, 32, 51, .15); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .94), rgba(235, 242, 255, .8)); padding: 20px; box-shadow: 0 16px 44px rgba(23, 32, 51, .12); }
     .answer-line { display: none; }
     .reflection-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(260px, .7fr); gap: 18px; }
     .reflection-panel { border: 1px solid rgba(79, 99, 199, .18); background: linear-gradient(135deg, rgba(235, 238, 255, .9), rgba(255, 253, 246, .84)); }
-    .teacher-notes { background: var(--night); color: #f8fafc; }
-    .teacher-notes ul { margin-bottom: 0; }
-    .teacher-notes li { color: #dce6f5; }
+    .next-challenge { background: var(--night); color: #f8fafc; }
+    .next-challenge ul { margin-bottom: 0; }
+    .next-challenge li { color: #dce6f5; }
     @media (max-width: 860px) {
       .lesson-hero, .band-heading, .concept-grid, .example-panel, .reflection-grid { grid-template-columns: 1fr; }
       .lesson-hero { min-height: 0; padding: 40px 18px 30px; }
@@ -619,18 +648,19 @@ function createStaticLessonHtml(
     @media (max-width: 560px) {
       .hero-copy h1 { font-size: 34px; }
       .hero-summary { font-size: 16px; }
-      .explain-step, .script-beat { grid-template-columns: 1fr; }
+      .explain-step, .explore-beat { grid-template-columns: 1fr; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
     }
   </style>
+  ${safeThemeCss ? `<style id="${THEME_STYLE_ID}">${styleForHtml(safeThemeCss)}</style>` : ""}
 </head>
 <body>
   <main class="lesson-page" data-runtime="static-lesson">
     <header class="lesson-hero">
       <div class="hero-copy">
-        <p class="kicker">Guided lesson</p>
+        <p class="kicker">Student mission</p>
         <h1>${escapeHtml(spec.title)}</h1>
         <p class="hero-summary">${escapeHtml(plan.hookBody)}</p>
         <div class="lesson-meta">
@@ -640,8 +670,8 @@ function createStaticLessonHtml(
         </div>
       </div>
       <aside class="hero-panel" aria-labelledby="objectives-title">
-        <p class="kicker">Learning path</p>
-        <h2 id="objectives-title">What students will be able to do</h2>
+        <p class="kicker">Your goals</p>
+        <h2 id="objectives-title">What you will explore</h2>
         <ul class="objective-list">${plan.objectives.map((item) => `<li><button type="button" aria-pressed="false" data-objective-toggle>✓</button><span>${escapeHtml(item)}</span></li>`).join("")}</ul>
       </aside>
     </header>
@@ -651,10 +681,10 @@ function createStaticLessonHtml(
           ? `<section class="lesson-band">
         <div class="band-heading">
           <div>
-            <p class="kicker">Watch and listen</p>
-            <h2>Anchor the idea visually</h2>
+            <p class="kicker">Look closely</p>
+            <h2>Start with the visual</h2>
           </div>
-          <p>Use the media first, then return to it during the explanation and practice.</p>
+          <p>Notice details, patterns, and changes you can use as evidence later.</p>
         </div>
         <div class="media-showcase">
           ${mediaItems
@@ -675,21 +705,20 @@ function createStaticLessonHtml(
       <section class="lesson-band">
         <div class="band-heading">
           <div>
-            <p class="kicker">Teaching flow</p>
-            <h2>Move from curiosity to practice</h2>
+            <p class="kicker">Explore path</p>
+            <h2>Follow the trail</h2>
           </div>
-          <p>Each beat pairs teacher narration with an action students can take.</p>
+          <p>Use each stop to observe, compare, try an idea, and explain your reasoning.</p>
         </div>
-        <div class="talk-track">
+        <div class="explore-track">
           ${plan.lectureScript
             .map(
-              (item, index) => `<article class="script-beat">
+              (item, index) => `<article class="explore-beat">
             <span class="beat-number">${index + 1}</span>
             <div>
               <p class="kicker">${escapeHtml(item.segment)}</p>
               <h3>${escapeHtml(item.title)}</h3>
-              <p><strong>Teacher says:</strong> ${escapeHtml(item.teacherNarration)}</p>
-              <p><strong>Students do:</strong> ${escapeHtml(item.studentAction)}</p>
+              <p>${escapeHtml(item.studentAction)}</p>
             </div>
           </article>`
             )
@@ -700,9 +729,9 @@ function createStaticLessonHtml(
         <div class="band-heading">
           <div>
             <p class="kicker">Core ideas</p>
-            <h2>Vocabulary and explanation</h2>
+            <h2>Words and ideas to unlock</h2>
           </div>
-          <p>Introduce the terms beside the sequence of ideas so students can connect names to meaning.</p>
+          <p>Connect each term to what you can observe, test, or explain.</p>
         </div>
         <div class="concept-grid">
           <aside class="vocab-panel">
@@ -717,7 +746,7 @@ function createStaticLessonHtml(
       <section class="lesson-band">
         <div class="example-panel">
           <div>
-            <p class="kicker">Worked example</p>
+            <p class="kicker">Try one together</p>
             <h2>${escapeHtml(plan.workedExample.title)}</h2>
           </div>
           <div class="lesson-copy">${escapeHtml(plan.workedExample.body)}</div>
@@ -765,7 +794,7 @@ function createStaticLessonHtml(
             <p class="kicker">Quick check</p>
             <h2>${escapeHtml(plan.quiz.title)}</h2>
           </div>
-          <p>Students get immediate feedback and can use the explanation to revise their reasoning.</p>
+          <p>Choose an answer, read the feedback, and revise your reasoning.</p>
         </div>
         <div class="quiz-grid">
           ${plan.quiz.items
@@ -789,10 +818,10 @@ function createStaticLessonHtml(
             <h2>Reflect</h2>
             <p>${escapeHtml(plan.reflectionPrompt)}</p>
           </div>
-          <aside class="teacher-notes">
-            <p class="kicker">Teacher notes</p>
-            <h2>Facilitation moves</h2>
-            <ul>${plan.teacherTips.map((tip) => `<li>${escapeHtml(tip)}</li>`).join("")}</ul>
+          <aside class="next-challenge">
+            <p class="kicker">Keep exploring</p>
+            <h2>Next challenge</h2>
+            <ul>${plan.explanationSections.map((section) => `<li>Find or sketch one example of ${escapeHtml(section.title.toLowerCase())}.</li>`).join("")}</ul>
           </aside>
         </div>
       </section>
@@ -802,6 +831,29 @@ function createStaticLessonHtml(
   <script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(runtimeScript ?? "")}</script>
 </body>
 </html>`;
+}
+
+export function validateSandboxedLessonThemeCss(css: string) {
+  const trimmed = css.trim();
+  if (trimmed.length > MAX_THEME_CSS_LENGTH) {
+    throw new Error("Sandboxed lesson theme CSS is too large.");
+  }
+  if (/<\/?style\b/i.test(trimmed) || /<script\b/i.test(trimmed)) {
+    throw new Error("Sandboxed lesson theme CSS cannot include HTML tags.");
+  }
+  if (
+    /@import\b/i.test(trimmed) ||
+    /url\s*\(/i.test(trimmed) ||
+    /expression\s*\(/i.test(trimmed) ||
+    /javascript\s*:/i.test(trimmed) ||
+    /behavior\s*:/i.test(trimmed) ||
+    /-moz-binding\s*:/i.test(trimmed) ||
+    /position\s*:\s*fixed/i.test(trimmed)
+  ) {
+    throw new Error(
+      "Sandboxed lesson theme CSS cannot load external or executable content."
+    );
+  }
 }
 
 export function validateSandboxedLessonHtml(html: string) {
@@ -845,4 +897,66 @@ export function validateSandboxedLessonHtml(html: string) {
     }
     throw new Error("Unsupported script tag in sandboxed lesson HTML.");
   }
+
+  const themeStyle = html.match(
+    new RegExp(
+      `<style\\b[^>]*\\bid=["']${THEME_STYLE_ID}["'][^>]*>([\\s\\S]*?)<\\/style>`,
+      "i"
+    )
+  )?.[1];
+  if (themeStyle) {
+    validateSandboxedLessonThemeCss(themeStyle);
+  }
+}
+
+export type SandboxDemoReview = {
+  passed: boolean;
+  detail: string;
+  checks: { label: string; passed: boolean }[];
+};
+
+function countMatches(value: string, pattern: RegExp) {
+  return value.match(pattern)?.length ?? 0;
+}
+
+export function reviewSandboxedLessonArtifact(
+  artifact: SandboxedLessonArtifact
+): SandboxDemoReview {
+  const html = artifact.html;
+  const isSolar = artifact.spec.kind === "solar-system";
+  const colorCount = countMatches(
+    html,
+    /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|oklch\(|linear-gradient|radial-gradient/gi
+  );
+  const hasGeneratedTheme = isSolar || html.includes(`id="${THEME_STYLE_ID}"`);
+  const hasInteractiveControls =
+    isSolar ||
+    /\bdata-(quiz-choice|classify-choice|objective-toggle)\b/.test(html);
+  const hasLargeTouchAreas =
+    isSolar ||
+    (/min-height:\s*(?:5[2-9]|[6-9]\d|[1-9]\d{2,})px/i.test(html) &&
+      /\bdata-(quiz-choice|classify-choice)\b/.test(html));
+  const hasPlayfulVisuals =
+    isSolar ||
+    (colorCount >= 14 &&
+      /box-shadow|border-radius|transform|animation|transition/i.test(html));
+
+  const checks = [
+    { label: "sandbox runtime marker", passed: /data-runtime=/.test(html) },
+    { label: "topic-specific theme", passed: hasGeneratedTheme },
+    { label: "large interactive areas", passed: hasLargeTouchAreas },
+    { label: "student interaction hooks", passed: hasInteractiveControls },
+    { label: "playful colorful visuals", passed: hasPlayfulVisuals },
+  ];
+  const passed = checks.every((check) => check.passed);
+  const failed = checks
+    .filter((check) => !check.passed)
+    .map((check) => check.label);
+  return {
+    passed,
+    checks,
+    detail: passed
+      ? "Demo review passed: colorful theme, large interaction areas, and student feedback hooks are present."
+      : `Demo review needs attention: ${failed.join(", ")}.`,
+  };
 }

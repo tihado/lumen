@@ -27,9 +27,11 @@ import {
 import {
   fallbackLessonPlan,
   fallbackLessonRuntimeScript,
+  fallbackLessonThemeCss,
   generateLessonPlan,
-  generateLessonRuntimeScript,
+  generateLessonRuntimeEnhancement,
   type LessonPlan,
+  reviewSandboxedLessonWithCodeModel,
 } from "./providers/llm";
 import {
   type ExtractedEntity,
@@ -845,32 +847,42 @@ export async function* generateLessonStream(input: {
     );
 
     const s8 = step();
-    yield providerStarted(s8, "llm", "Generate sandbox HTML/JS runtime");
+    yield providerStarted(s8, "llm", "Generate sandbox theme and JS runtime");
     let runtimeScript: string | undefined;
+    let themeCss: string | undefined;
     let runtimeScriptDetail = "Solar system uses bundled runtime";
     let runtimeScriptUsedFallback = false;
     if (!input.transcript.toLowerCase().includes("solar system")) {
       if (input.readiness.llm) {
         try {
-          const generatedScript = await generateLessonRuntimeScript({
+          const generatedRuntime = await generateLessonRuntimeEnhancement({
             prompt: input.transcript,
             plan: lessonPlan,
             entities,
             env: input.env,
           });
-          runtimeScript = generatedScript.code;
-          runtimeScriptDetail = generatedScript.usedFallback
-            ? `Validated fallback after OpenAI ${generatedScript.model}`
-            : `Generated sandbox HTML/JS via OpenAI ${generatedScript.model}`;
-          runtimeScriptUsedFallback = generatedScript.usedFallback;
+          runtimeScript = generatedRuntime.code;
+          themeCss = generatedRuntime.css;
+          runtimeScriptDetail = generatedRuntime.usedFallback
+            ? `Generated theme/runtime via OpenAI ${generatedRuntime.model} with fallback: CSS ${generatedRuntime.cssUsedFallback ? "fallback" : "generated"}, JS ${generatedRuntime.codeUsedFallback ? "fallback" : "generated"}`
+            : `Generated topic theme and sandbox JS via OpenAI ${generatedRuntime.model}`;
+          runtimeScriptUsedFallback = generatedRuntime.usedFallback;
         } catch {
+          themeCss = fallbackLessonThemeCss({
+            prompt: input.transcript,
+            plan: lessonPlan,
+          });
           runtimeScript = fallbackLessonRuntimeScript();
-          runtimeScriptDetail = "Fallback inline JS";
+          runtimeScriptDetail = "Fallback theme and inline JS";
           runtimeScriptUsedFallback = true;
         }
       } else {
+        themeCss = fallbackLessonThemeCss({
+          prompt: input.transcript,
+          plan: lessonPlan,
+        });
         runtimeScript = fallbackLessonRuntimeScript();
-        runtimeScriptDetail = "Fallback inline JS";
+        runtimeScriptDetail = "Fallback theme and inline JS";
         runtimeScriptUsedFallback = true;
       }
     }
@@ -882,11 +894,7 @@ export async function* generateLessonStream(input: {
     );
 
     const s9 = step();
-    yield providerStarted(
-      s9,
-      "orchestrator",
-      "Assemble and persist sandboxed HTML lesson"
-    );
+    yield providerStarted(s9, "orchestrator", "Assemble sandboxed HTML lesson");
     const firstImage = generatedMedia.find(
       (item) => item.node.modality === "image"
     );
@@ -897,6 +905,7 @@ export async function* generateLessonStream(input: {
       prompt: input.transcript,
       plan: lessonPlan,
       runtimeScript,
+      themeCss,
       media: {
         assets: [
           ...generatedMedia.map((item) => ({
@@ -949,11 +958,41 @@ export async function* generateLessonStream(input: {
         entities,
       },
     });
-    const persistCompleted = providerCompleted(
+    yield providerCompleted(
       s9,
       "orchestrator",
-      "Saved sandboxed HTML/JS lesson version to Postgres"
+      "Sandboxed HTML assembled and validated"
     );
+
+    const s10 = step();
+    yield providerStarted(
+      s10,
+      "llm",
+      "Review sandbox demo quality (CODE_MODEL)"
+    );
+    const demoReview = input.transcript.toLowerCase().includes("solar system")
+      ? {
+          passed: true,
+          detail: "Solar system uses the source-controlled demo runtime.",
+          checks: [],
+          model: input.env.OPENAI_CODE_MODEL ?? "CODE_MODEL",
+          usedFallback: true,
+        }
+      : await reviewSandboxedLessonWithCodeModel({
+          artifact,
+          prompt: input.transcript,
+          plan: lessonPlan,
+          env: input.env,
+        });
+    yield providerCompleted(
+      s10,
+      "llm",
+      demoReview.detail,
+      demoReview.usedFallback || !demoReview.passed
+    );
+
+    const s11 = step();
+    yield providerStarted(s11, "orchestrator", "Persist sandboxed lesson");
     await saveLessonVersion({
       lessonId,
       title: artifact.title,
@@ -968,7 +1007,11 @@ export async function* generateLessonStream(input: {
       }),
     });
     await finishGenerationRun({ id: runId, status: "completed" });
-    yield persistCompleted;
+    yield providerCompleted(
+      s11,
+      "orchestrator",
+      "Saved sandboxed HTML/JS lesson version to Postgres"
+    );
 
     yield { type: "run_completed", runId, lessonId };
   } catch (e) {

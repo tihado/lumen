@@ -2,6 +2,12 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { AppEnv } from "@/lib/env";
+import {
+  reviewSandboxedLessonArtifact,
+  type SandboxDemoReview,
+  type SandboxedLessonArtifact,
+  validateSandboxedLessonThemeCss,
+} from "@/lib/lesson/html-artifact";
 import type { ExtractedEntity } from "./pioneer";
 
 const DEFAULT_LESSON_MODEL = "gpt-5";
@@ -174,6 +180,13 @@ const openAIUtilityJsonSchema = z.object({
 });
 
 export type OpenAIUtilityJson = z.infer<typeof openAIUtilityJsonSchema>;
+
+const sandboxDemoReviewSchema = z.object({
+  passed: z.boolean(),
+  summary: z.string().min(1).max(420),
+  strengths: z.array(z.string().min(1).max(180)).max(5),
+  concerns: z.array(z.string().min(1).max(180)).max(5),
+});
 
 export function fallbackLessonPlan(input: {
   topic: string;
@@ -424,12 +437,14 @@ export async function generateOpenAIText(input: {
 export async function generateOpenAICode(input: {
   prompt: string;
   env: AppEnv;
+  system?: string;
 }): Promise<{ text: string; model: string }> {
   const model = input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL;
   const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
   const { text } = await generateText({
     model: openai(model),
     system:
+      input.system ??
       "You write production-minded browser JavaScript. Return only the requested JavaScript code, with no Markdown fences and no explanations.",
     prompt: input.prompt,
   });
@@ -438,7 +453,9 @@ export async function generateOpenAICode(input: {
 
 function stripCodeFence(value: string) {
   const trimmed = value.trim();
-  const fenced = trimmed.match(/^```(?:javascript|js)?\s*([\s\S]*?)\s*```$/i);
+  const fenced = trimmed.match(
+    /^```(?:javascript|js|css)?\s*([\s\S]*?)\s*```$/i
+  );
   return (fenced?.[1] ?? trimmed).trim();
 }
 
@@ -507,32 +524,230 @@ if (root) {
 `.trim();
 }
 
+type LessonRuntimeInput = {
+  prompt: string;
+  plan: LessonPlan;
+  entities?: ExtractedEntity[];
+  env: AppEnv;
+};
+
+function entitySummary(entities?: ExtractedEntity[]) {
+  return (
+    entities
+      ?.slice(0, 24)
+      .map((e) => `${e.label} (${e.kind})`)
+      .join(", ") || "none"
+  );
+}
+
+function studentPresentationData(plan: LessonPlan) {
+  return {
+    title: plan.title,
+    gradeBand: plan.gradeBand,
+    durationMinutes: plan.durationMinutes,
+    hook: plan.hookBody,
+    objectives: plan.objectives,
+    keyVocabulary: plan.keyVocabulary,
+    explanationSections: plan.explanationSections,
+    workedExample: plan.workedExample,
+    exploreSteps: plan.lectureScript.map((item) => ({
+      segment: item.segment,
+      title: item.title,
+      action: item.studentAction,
+    })),
+    activity: plan.activity,
+    quiz: plan.quiz,
+    reflectionPrompt: plan.reflectionPrompt,
+  };
+}
+
+function topicPalette(input: Pick<LessonRuntimeInput, "prompt" | "plan">) {
+  const text = `${input.prompt} ${input.plan.title}`.toLowerCase();
+  if (/(ocean|water|river|weather|cycle|marine|rain|cloud)/.test(text)) {
+    return {
+      name: "aqua discovery",
+      page: "#e6fbff",
+      ink: "#123047",
+      accent: "#0087a7",
+      accent2: "#ffb84d",
+      panel: "#f8fdff",
+    };
+  }
+  if (
+    /(plant|photosynthesis|animal|body|biology|cell|ecosystem|food)/.test(text)
+  ) {
+    return {
+      name: "garden lab",
+      page: "#f0f9e8",
+      ink: "#1d3322",
+      accent: "#2f8f46",
+      accent2: "#e85d75",
+      panel: "#fffef4",
+    };
+  }
+  if (/(space|planet|solar|star|moon|gravity|orbit)/.test(text)) {
+    return {
+      name: "cosmic classroom",
+      page: "#ecf3ff",
+      ink: "#18233f",
+      accent: "#5b5ce2",
+      accent2: "#ffb23f",
+      panel: "#fbfcff",
+    };
+  }
+  if (/(history|ancient|civilization|war|revolution|culture|map)/.test(text)) {
+    return {
+      name: "museum quest",
+      page: "#fff4df",
+      ink: "#372817",
+      accent: "#b85c38",
+      accent2: "#267c87",
+      panel: "#fffaf0",
+    };
+  }
+  if (/(math|fraction|geometry|number|algebra|measure|pattern)/.test(text)) {
+    return {
+      name: "math arcade",
+      page: "#f5f0ff",
+      ink: "#27213f",
+      accent: "#7c3aed",
+      accent2: "#14a58b",
+      panel: "#fffaff",
+    };
+  }
+  return {
+    name: "maker studio",
+    page: "#fff8e8",
+    ink: "#243042",
+    accent: "#0f8b8d",
+    accent2: "#f25f5c",
+    panel: "#fffff7",
+  };
+}
+
+export function fallbackLessonThemeCss(
+  input: Pick<LessonRuntimeInput, "prompt" | "plan">
+) {
+  const palette = topicPalette(input);
+  return `
+:root {
+  --demo-page: ${palette.page};
+  --demo-ink: ${palette.ink};
+  --demo-accent: ${palette.accent};
+  --demo-accent-2: ${palette.accent2};
+  --demo-panel: ${palette.panel};
+}
+.lesson-page {
+  color: var(--demo-ink);
+  background:
+    radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--demo-accent) 20%, transparent), transparent 24rem),
+    radial-gradient(circle at 84% 10%, color-mix(in srgb, var(--demo-accent-2) 28%, transparent), transparent 22rem),
+    linear-gradient(135deg, var(--demo-page), #ffffff 72%);
+}
+.lesson-hero::before,
+.hero-panel,
+.quiz-card,
+.activity-card,
+.explore-beat,
+.explain-step,
+.vocab-panel,
+.reflection-panel {
+  border-color: color-mix(in srgb, var(--demo-accent) 24%, transparent);
+  box-shadow: 0 20px 58px rgba(31, 41, 55, .14);
+}
+.lesson-hero::before {
+  background:
+    linear-gradient(132deg, rgba(255,255,255,.78), rgba(255,255,255,.36)),
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--demo-accent) 14%, transparent) 0 3px, transparent 3px 22px);
+}
+.kicker,
+.term,
+.step-tag {
+  color: var(--demo-accent);
+}
+.beat-number,
+.next-challenge,
+.example-panel {
+  background: linear-gradient(135deg, var(--demo-ink), color-mix(in srgb, var(--demo-accent) 38%, #111827));
+}
+[data-quiz-choice],
+[data-classify-choice],
+[data-objective-toggle] {
+  min-height: 58px;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--demo-accent) 26%, transparent);
+  background: linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--demo-panel) 88%, var(--demo-accent-2)));
+}
+.quiz-card,
+.activity-card {
+  min-height: 250px;
+  background:
+    radial-gradient(circle at 12% 14%, color-mix(in srgb, var(--demo-accent-2) 20%, transparent), transparent 9rem),
+    linear-gradient(180deg, var(--demo-panel), #ffffff);
+}
+.quiz-card:hover,
+.activity-card:hover,
+[data-quiz-choice]:hover,
+[data-classify-choice]:hover {
+  transform: translateY(-2px);
+  border-color: var(--demo-accent);
+}
+`.trim();
+}
+
+export async function generateLessonRuntimeThemeCss(
+  input: LessonRuntimeInput
+): Promise<{ css: string; model: string; usedFallback: boolean }> {
+  const fallbackCss = fallbackLessonThemeCss(input);
+  const result = await generateOpenAICode({
+    env: input.env,
+    system:
+      "You write safe, expressive CSS for a sandboxed children-facing lesson page. Return only CSS, with no Markdown fences and no explanations.",
+    prompt: [
+      "Create topic-specific CSS for an embedded sandboxed HTML lesson page.",
+      "The CSS will be placed after the base styles, so it should override and enrich the existing shell rather than replace it.",
+      "Make the page colorful, playful, readable, and suitable for a live student-facing teaching demo with children. Avoid a generic white-card dashboard look.",
+      "The sandbox is the student presentation, not the teacher guide. Do not style or introduce teacher-facing sections such as teacher notes, teacher narration, facilitation moves, or lesson-planning cards.",
+      "Make interactive areas large and obvious: [data-quiz-choice], [data-classify-choice], [data-objective-toggle], .quiz-card, and .activity-card need generous min-height, padding, and clear hover/focus states.",
+      "Use the lesson topic to choose a visual language: colors, gradients, section accents, soft patterns, and motion should feel specialized to the subject.",
+      "Allowed selectors include :root, .lesson-page, .lesson-hero, .hero-copy, .hero-panel, .lesson-band, .media-showcase, .explore-track, .concept-grid, .explain-timeline, .activity-grid, .quiz-grid, .reflection-grid, .next-challenge, .quiz-card, .activity-card, .explore-beat, .explain-step, .vocab-panel, .example-panel, .reflection-panel, button, [data-quiz-choice], [data-classify-choice], [data-objective-toggle], and pseudo-elements on those selectors.",
+      "Do not use @import, url(), external assets, position: fixed, CSS that hides main content, tiny text, or page-wide overlays. Keep it under 220 lines.",
+      `Teacher transcript:\n${input.prompt}`,
+      `Extracted schema entities:\n${entitySummary(input.entities)}`,
+      `Student presentation data:\n${JSON.stringify(studentPresentationData(input.plan))}`,
+    ].join("\n\n---\n\n"),
+  });
+  const css = stripCodeFence(result.text);
+  try {
+    validateSandboxedLessonThemeCss(css);
+  } catch {
+    return { css: fallbackCss, model: result.model, usedFallback: true };
+  }
+  return { css, model: result.model, usedFallback: false };
+}
+
 export async function generateLessonRuntimeScript(input: {
   prompt: string;
   plan: LessonPlan;
   entities?: ExtractedEntity[];
   env: AppEnv;
 }): Promise<{ code: string; model: string; usedFallback: boolean }> {
-  const entityList =
-    input.entities
-      ?.slice(0, 24)
-      .map((e) => `${e.label} (${e.kind})`)
-      .join(", ") || "none";
   const result = await generateOpenAICode({
     env: input.env,
     prompt: [
       "Create vanilla browser JavaScript for an embedded sandboxed lesson page.",
       "Target the quality bar of the bundled solar system demo in this repository: polished visual hierarchy, topic-specific interaction, responsive layout, meaningful motion, clear feedback, and classroom-safe copy.",
-      "The HTML already contains [data-runtime='static-lesson'], [data-objective-toggle], [data-quiz-choice], [data-quiz-answer], [data-quiz-feedback], [data-classify-card], [data-classify-choice], and [data-classify-result]. It also contains <script type='application/json' id='lesson-data'> with { plan, media, schemaData }.",
-      "The base sandbox is already arranged as a colorful guided lesson with .lesson-hero, .media-showcase, .talk-track, .concept-grid, .explain-timeline, .activity-grid, .quiz-grid, and .reflection-grid. Enhance those regions or insert one high-value interactive module near the relevant section; do not flatten the page into generic white cards or repeated rows.",
+      "The HTML already contains [data-runtime='static-lesson'], [data-objective-toggle], [data-quiz-choice], [data-quiz-answer], [data-quiz-feedback], [data-classify-card], [data-classify-choice], and [data-classify-result]. It also contains <script type='application/json' id='lesson-data'> with { student, media, schemaData }.",
+      "The base sandbox is already arranged as a colorful student presentation with .lesson-hero, .media-showcase, .explore-track, .concept-grid, .explain-timeline, .activity-grid, .quiz-grid, .reflection-grid, and .next-challenge. Enhance those regions or insert one high-value student-facing interactive module near the relevant section; do not flatten the page into generic white cards or repeated rows.",
+      "This sandbox is for students, not the teacher canvas. Do not render teacherNarration, teacherTips, teacher notes, facilitation moves, or lesson-planning instructions.",
       "You may enhance the static lesson by creating additional sandbox HTML with document.createElement, CSS injected through a <style> element, SVG elements, Canvas 2D, timers, requestAnimationFrame, and DOM event listeners.",
       "Use Pioneer / GLiNER2 schemaData entities when they help build a concept map, process simulator, timeline, sorting lab, vocabulary hotspot, measurement comparison, or relationship visualization.",
       "Keep the existing objective toggles, quiz choices, and classification cards working. There may be multiple quiz article elements; compare a choice only with the [data-quiz-answer] inside the closest article.",
       "For classification, compare the picked value after ':' in data-classify-choice with the closest card's data-answer and write feedback into that card's [data-classify-result].",
       "Requirements: no imports, no network calls, no storage, no eval, no Function constructor, no document.write, no innerHTML/outerHTML/insertAdjacentHTML. Use DOM APIs and textContent. Keep it under 360 lines.",
       `Teacher transcript:\n${input.prompt}`,
-      `Extracted schema entities:\n${entityList}`,
-      `Lesson plan:\n${JSON.stringify(input.plan)}`,
+      `Extracted schema entities:\n${entitySummary(input.entities)}`,
+      `Student presentation data:\n${JSON.stringify(studentPresentationData(input.plan))}`,
     ].join("\n\n---\n\n"),
   });
   const code = stripCodeFence(result.text);
@@ -544,6 +759,110 @@ export async function generateLessonRuntimeScript(input: {
     };
   }
   return { code, model: result.model, usedFallback: false };
+}
+
+export async function generateLessonRuntimeEnhancement(
+  input: LessonRuntimeInput
+): Promise<{
+  css: string;
+  code: string;
+  model: string;
+  usedFallback: boolean;
+  cssUsedFallback: boolean;
+  codeUsedFallback: boolean;
+}> {
+  const [themeResult, scriptResult] = await Promise.allSettled([
+    generateLessonRuntimeThemeCss(input),
+    generateLessonRuntimeScript(input),
+  ]);
+  const theme =
+    themeResult.status === "fulfilled"
+      ? themeResult.value
+      : {
+          css: fallbackLessonThemeCss(input),
+          model: input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL,
+          usedFallback: true,
+        };
+  const script =
+    scriptResult.status === "fulfilled"
+      ? scriptResult.value
+      : {
+          code: fallbackLessonRuntimeScript(),
+          model: input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL,
+          usedFallback: true,
+        };
+  const model =
+    theme.model === script.model
+      ? theme.model
+      : `${theme.model} / ${script.model}`;
+  return {
+    css: theme.css,
+    code: script.code,
+    model,
+    usedFallback: theme.usedFallback || script.usedFallback,
+    cssUsedFallback: theme.usedFallback,
+    codeUsedFallback: script.usedFallback,
+  };
+}
+
+export async function reviewSandboxedLessonWithCodeModel(input: {
+  artifact: SandboxedLessonArtifact;
+  prompt: string;
+  plan: LessonPlan;
+  env: AppEnv;
+}): Promise<SandboxDemoReview & { model: string; usedFallback: boolean }> {
+  const baseline = reviewSandboxedLessonArtifact(input.artifact);
+  const model = input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL;
+  const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
+  try {
+    const { output } = await generateText({
+      model: openai(model),
+      output: Output.object({
+        schema: sandboxDemoReviewSchema,
+        name: "sandbox_demo_review",
+        description:
+          "A compact CODE_MODEL review of a generated children-facing sandbox lesson page.",
+      }),
+      system:
+        "You are a rigorous demo reviewer for children-facing educational sandbox HTML. Return schema-valid JSON only.",
+      prompt: [
+        "Review whether this sandbox page is playful, colorful, readable, and suitable for a live teaching demonstration for children.",
+        "Focus on topic-specific visual theme, large interactive areas, clear feedback, and whether the page feels more like an engaging lesson than a generic dashboard.",
+        "The sandbox is meant for students. Penalize visible teacher-facing guide content such as teacher notes, teacher narration, facilitation moves, or canvas planning cards.",
+        "Do not require external assets or browser execution. Judge from the HTML, embedded CSS, data hooks, and script structure.",
+        `Teacher transcript:\n${input.prompt}`,
+        `Student presentation data:\n${JSON.stringify(studentPresentationData(input.plan))}`,
+        `Deterministic checks:\n${JSON.stringify(baseline.checks)}`,
+        `HTML excerpt:\n${input.artifact.html.replace(/\s+/g, " ").slice(0, 14_000)}`,
+      ].join("\n\n---\n\n"),
+    });
+    const checks = [
+      ...baseline.checks,
+      {
+        label: `CODE_MODEL demo review (${model})`,
+        passed: output.passed,
+      },
+    ];
+    const passed = baseline.passed && output.passed;
+    return {
+      passed,
+      checks,
+      model,
+      usedFallback: false,
+      detail: passed
+        ? `CODE_MODEL ${model} review passed: ${output.summary}`
+        : `CODE_MODEL ${model} review flagged demo concerns: ${
+            output.concerns.join("; ") || output.summary
+          }`,
+    };
+  } catch {
+    return {
+      ...baseline,
+      model,
+      usedFallback: true,
+      detail: `CODE_MODEL ${model} review unavailable; deterministic fallback used. ${baseline.detail}`,
+    };
+  }
 }
 
 export async function generateOpenAIJson(input: {
