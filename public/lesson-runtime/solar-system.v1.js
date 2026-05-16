@@ -112,21 +112,60 @@ const sunInfo = {
 const runtimeStyles = document.createElement("style");
 runtimeStyles.textContent = `
   [data-runtime="solar-system"].scene-wrap {
+    isolation: isolate;
     border-color: rgba(172, 190, 220, .18);
     border-radius: 8px;
-    background:
-      radial-gradient(circle at 48% 43%, rgba(255, 209, 102, .09), transparent 18rem),
-      rgba(2, 6, 23, .72);
+    background-color: rgba(2, 6, 23, .72);
+    background-image:
+      radial-gradient(circle at 48% 43%, rgba(255, 209, 102, .09), transparent 18rem);
     box-shadow: 0 24px 80px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255,255,255,.06);
   }
   [data-runtime="solar-system"].scene-wrap::before {
     content: "";
     position: absolute;
     inset: 0;
+    z-index: 0;
     pointer-events: none;
     background:
+      radial-gradient(circle at 6% 14%, rgba(255,255,255,.95) 0 1px, transparent 1.8px),
+      radial-gradient(circle at 13% 67%, rgba(191,219,254,.7) 0 .9px, transparent 1.7px),
+      radial-gradient(circle at 18% 31%, rgba(255,244,214,.9) 0 1.2px, transparent 2px),
+      radial-gradient(circle at 24% 83%, rgba(255,255,255,.62) 0 .8px, transparent 1.5px),
+      radial-gradient(circle at 31% 18%, rgba(191,219,254,.8) 0 1px, transparent 1.9px),
+      radial-gradient(circle at 37% 72%, rgba(255,255,255,.86) 0 1.1px, transparent 2px),
+      radial-gradient(circle at 42% 9%, rgba(255,244,214,.72) 0 .8px, transparent 1.6px),
+      radial-gradient(circle at 49% 58%, rgba(191,219,254,.55) 0 .7px, transparent 1.4px),
+      radial-gradient(circle at 54% 22%, rgba(255,255,255,.88) 0 1px, transparent 1.8px),
+      radial-gradient(circle at 61% 88%, rgba(255,244,214,.8) 0 1.2px, transparent 2.1px),
+      radial-gradient(circle at 68% 13%, rgba(191,219,254,.66) 0 .9px, transparent 1.7px),
+      radial-gradient(circle at 73% 48%, rgba(255,255,255,.92) 0 1px, transparent 1.9px),
+      radial-gradient(circle at 79% 76%, rgba(191,219,254,.72) 0 .8px, transparent 1.6px),
+      radial-gradient(circle at 86% 27%, rgba(255,244,214,.86) 0 1.1px, transparent 2px),
+      radial-gradient(circle at 92% 63%, rgba(255,255,255,.68) 0 .8px, transparent 1.5px),
+      radial-gradient(circle at 97% 8%, rgba(191,219,254,.78) 0 1px, transparent 1.8px),
       radial-gradient(circle at 50% 45%, transparent 0 36%, rgba(2, 6, 23, .2) 58%, rgba(2, 6, 23, .78) 100%),
       linear-gradient(120deg, rgba(103, 232, 249, .12), transparent 32%, rgba(251, 113, 133, .08));
+    opacity: .82;
+    filter: drop-shadow(0 0 5px rgba(255,255,255,.3));
+    animation: solar-stars-twinkle 4.8s ease-in-out infinite alternate;
+  }
+  #solar-canvas {
+    position: relative;
+    z-index: 1;
+  }
+  @keyframes solar-stars-twinkle {
+    0%, 100% {
+      opacity: .58;
+      filter: brightness(.86) drop-shadow(0 0 2px rgba(255,255,255,.16));
+    }
+    45% {
+      opacity: .94;
+      filter: brightness(1.34) drop-shadow(0 0 7px rgba(191,219,254,.4));
+    }
+    72% {
+      opacity: .72;
+      filter: brightness(1.05) drop-shadow(0 0 4px rgba(255,244,214,.28));
+    }
   }
   [data-runtime="solar-system"] .toolbar {
     left: 26px;
