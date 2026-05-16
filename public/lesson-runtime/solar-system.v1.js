@@ -182,11 +182,11 @@ function resetView() {
   distance = 34;
   desiredTarget.set(0, 0, 0);
   if (nameEl) {
-    nameEl.textContent = "Toàn cảnh";
+    nameEl.textContent = "Overview";
   }
   if (descriptionEl) {
     descriptionEl.textContent =
-      "Click vào một hành tinh để phóng to và đọc thông tin chi tiết.";
+      "Click a planet to zoom in and read detailed information.";
   }
   if (diameterEl) {
     diameterEl.textContent = "—";
@@ -199,7 +199,7 @@ function resetView() {
   }
   if (factsEl) {
     factsEl.innerHTML =
-      "<li>Hệ Mặt Trời gồm Mặt Trời, tám hành tinh và nhiều thiên thể nhỏ.</li>";
+      "<li>The solar system includes the Sun, eight planets, and many smaller bodies.</li>";
   }
   setActiveButton();
 }

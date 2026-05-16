@@ -38,7 +38,7 @@ type TimelineRow = {
 export function StudioClient() {
   const router = useRouter();
   const [transcript, setTranscript] = useState(
-    "tôi muốn tìm hiểu về hệ mặt trời"
+    "I want to learn about the solar system"
   );
   const [lesson, setLesson] = useState<LessonDocument | null>(null);
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);

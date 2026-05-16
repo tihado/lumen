@@ -26,7 +26,7 @@ export default async function LessonsPage() {
             Saved lessons
           </p>
           <h1 className="font-semibold text-3xl tracking-tight">
-            Bài giảng đã lưu
+            Saved lessons
           </h1>
         </div>
         <Link className={buttonVariants({ variant: "outline" })} href="/studio">
@@ -47,7 +47,7 @@ export default async function LessonsPage() {
           <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
             <BookOpen className="size-8 text-muted-foreground" />
             <p className="text-muted-foreground text-sm">
-              Chưa có bài giảng nào được lưu trong Postgres.
+              No lessons have been saved in Postgres yet.
             </p>
             <Link className={buttonVariants()} href="/studio">
               Generate first lesson

@@ -7,7 +7,7 @@ import {
 import { slugifyLessonTitle } from "./slug";
 
 const plan: LessonPlan = {
-  title: "Khám phá hệ Mặt Trời",
+  title: "Explore the Solar System",
   gradeBand: "General audience",
   durationMinutes: 20,
   objectives: ["Explain the solar system", "Compare planets"],
@@ -34,7 +34,7 @@ const plan: LessonPlan = {
 describe("sandboxed lesson HTML", () => {
   it("creates a solar-system artifact with data and bundled runtime", () => {
     const artifact = createSandboxedLessonArtifact({
-      prompt: "tôi muốn tìm hiểu về hệ mặt trời",
+      prompt: "I want to learn about the solar system",
       plan,
     });
 
@@ -42,7 +42,7 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).toContain('data-runtime="solar-system"');
     expect(artifact.html).toContain('id="lesson-data"');
     expect(artifact.html).toContain("/lesson-runtime/solar-system.v1.js");
-    expect(artifact.html).toContain("Trái Đất");
+    expect(artifact.html).toContain("Earth");
   });
 
   it("rejects unsupported scripts and inline handlers", () => {
@@ -59,9 +59,9 @@ describe("sandboxed lesson HTML", () => {
     ).toThrow(/Unsupported script/);
   });
 
-  it("creates stable slugs for Vietnamese lesson titles", () => {
-    expect(slugifyLessonTitle("Khám phá hệ Mặt Trời")).toBe(
-      "kham-pha-he-mat-troi"
+  it("creates stable slugs for punctuated lesson titles", () => {
+    expect(slugifyLessonTitle("Intro to AI: Part 1")).toBe(
+      "intro-to-ai-part-1"
     );
   });
 });

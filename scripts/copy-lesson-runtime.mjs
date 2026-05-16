@@ -1,18 +1,18 @@
 import { copyFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-const target = join(
-  process.cwd(),
-  "public",
-  "lesson-runtime",
-  "vendor",
-  "three.module.js"
-);
+const vendorFiles = ["three.module.js", "three.core.js"];
+const vendorDir = join(process.cwd(), "public", "lesson-runtime", "vendor");
 
-mkdirSync(dirname(target), { recursive: true });
-copyFileSync(
-  join(process.cwd(), "node_modules", "three", "build", "three.module.js"),
-  target
-);
+mkdirSync(vendorDir, { recursive: true });
 
-console.log(`Copied Three.js runtime to ${target}`);
+for (const fileName of vendorFiles) {
+  const target = join(vendorDir, fileName);
+
+  copyFileSync(
+    join(process.cwd(), "node_modules", "three", "build", fileName),
+    target
+  );
+
+  console.log(`Copied Three.js runtime to ${target}`);
+}

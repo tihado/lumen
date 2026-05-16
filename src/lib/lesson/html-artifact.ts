@@ -46,139 +46,139 @@ export type SandboxedLessonArtifact = {
 const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
   {
     id: "mercury",
-    name: "Sao Thủy",
+    name: "Mercury",
     radius: 0.38,
     orbitRadius: 4,
     orbitSpeed: 0.024,
     color: "#b7aaa0",
     description:
-      "Hành tinh gần Mặt Trời nhất, có bề mặt nhiều hố va chạm và biên độ nhiệt rất lớn.",
+      "The closest planet to the Sun, with a heavily cratered surface and extreme temperature swings.",
     facts: [
-      "Một năm trên Sao Thủy chỉ dài khoảng 88 ngày Trái Đất.",
-      "Sao Thủy gần như không có khí quyển dày để giữ nhiệt.",
+      "A year on Mercury lasts about 88 Earth days.",
+      "Mercury has almost no thick atmosphere to trap heat.",
     ],
     diameter: "4.879 km",
-    distanceFromSun: "57,9 triệu km",
-    orbitalPeriod: "88 ngày",
+    distanceFromSun: "57.9 million km",
+    orbitalPeriod: "88 days",
   },
   {
     id: "venus",
-    name: "Sao Kim",
+    name: "Venus",
     radius: 0.95,
     orbitRadius: 5.7,
     orbitSpeed: 0.018,
     color: "#d8b46a",
     description:
-      "Hành tinh nóng nhất hệ Mặt Trời vì khí quyển giàu CO2 tạo hiệu ứng nhà kính mạnh.",
+      "The hottest planet in the solar system because its CO2-rich atmosphere creates a powerful greenhouse effect.",
     facts: [
-      "Sao Kim quay rất chậm và quay ngược chiều so với hầu hết hành tinh.",
-      "Mây axit sulfuric khiến bề mặt khó quan sát trực tiếp.",
+      "Venus rotates very slowly and spins backward compared with most planets.",
+      "Sulfuric acid clouds make its surface difficult to observe directly.",
     ],
     diameter: "12.104 km",
-    distanceFromSun: "108,2 triệu km",
-    orbitalPeriod: "225 ngày",
+    distanceFromSun: "108.2 million km",
+    orbitalPeriod: "225 days",
   },
   {
     id: "earth",
-    name: "Trái Đất",
+    name: "Earth",
     radius: 1,
     orbitRadius: 7.6,
     orbitSpeed: 0.014,
     color: "#3b82f6",
     description:
-      "Hành tinh duy nhất hiện biết có sự sống, có nước lỏng ổn định trên bề mặt.",
+      "The only planet currently known to support life, with stable liquid water on its surface.",
     facts: [
-      "Khoảng 71% bề mặt Trái Đất được bao phủ bởi nước.",
-      "Từ trường giúp bảo vệ sinh quyển khỏi gió Mặt Trời.",
+      "About 71% of Earth's surface is covered by water.",
+      "Earth's magnetic field helps protect the biosphere from the solar wind.",
     ],
     diameter: "12.742 km",
-    distanceFromSun: "149,6 triệu km",
-    orbitalPeriod: "365,25 ngày",
+    distanceFromSun: "149.6 million km",
+    orbitalPeriod: "365.25 days",
   },
   {
     id: "mars",
-    name: "Sao Hỏa",
+    name: "Mars",
     radius: 0.53,
     orbitRadius: 9.7,
     orbitSpeed: 0.011,
     color: "#c85835",
     description:
-      "Hành tinh đỏ có bụi oxit sắt, núi lửa khổng lồ và dấu vết nước cổ đại.",
+      "The red planet has iron oxide dust, enormous volcanoes, and traces of ancient water.",
     facts: [
-      "Olympus Mons trên Sao Hỏa là núi lửa lớn nhất đã biết trong hệ Mặt Trời.",
-      "Các robot tự hành đã tìm thấy bằng chứng về môi trường từng có nước.",
+      "Olympus Mons on Mars is the largest known volcano in the solar system.",
+      "Rovers have found evidence of environments that once held water.",
     ],
     diameter: "6.779 km",
-    distanceFromSun: "227,9 triệu km",
-    orbitalPeriod: "687 ngày",
+    distanceFromSun: "227.9 million km",
+    orbitalPeriod: "687 days",
   },
   {
     id: "jupiter",
-    name: "Sao Mộc",
+    name: "Jupiter",
     radius: 2.1,
     orbitRadius: 13,
     orbitSpeed: 0.006,
     color: "#d8a16f",
     description:
-      "Hành tinh lớn nhất, là khí khổng lồ với Vết Đỏ Lớn - một cơn bão tồn tại rất lâu.",
+      "The largest planet, a gas giant with the Great Red Spot, a long-lived storm.",
     facts: [
-      "Sao Mộc có khối lượng lớn hơn tất cả hành tinh còn lại cộng lại.",
-      "Nhiều vệ tinh của Sao Mộc, như Europa, là mục tiêu nghiên cứu sự sống tiềm năng.",
+      "Jupiter has more mass than all the other planets combined.",
+      "Many of Jupiter's moons, such as Europa, are targets in the search for potential life.",
     ],
     diameter: "139.820 km",
-    distanceFromSun: "778,5 triệu km",
-    orbitalPeriod: "11,86 năm",
+    distanceFromSun: "778.5 million km",
+    orbitalPeriod: "11.86 years",
   },
   {
     id: "saturn",
-    name: "Sao Thổ",
+    name: "Saturn",
     radius: 1.75,
     orbitRadius: 16.5,
     orbitSpeed: 0.0045,
     color: "#e4c77f",
     description:
-      "Nổi bật với hệ vành đai rộng, chủ yếu gồm băng, đá và bụi nhỏ.",
+      "Known for its broad ring system, made mostly of ice, rock, and fine dust.",
     facts: [
-      "Sao Thổ có mật độ trung bình thấp hơn nước.",
-      "Vệ tinh Titan có khí quyển dày và hồ methane lỏng.",
+      "Saturn's average density is lower than water.",
+      "Its moon Titan has a thick atmosphere and lakes of liquid methane.",
     ],
     diameter: "116.460 km",
-    distanceFromSun: "1,43 tỷ km",
-    orbitalPeriod: "29,5 năm",
+    distanceFromSun: "1.43 billion km",
+    orbitalPeriod: "29.5 years",
   },
   {
     id: "uranus",
-    name: "Sao Thiên Vương",
+    name: "Uranus",
     radius: 1.35,
     orbitRadius: 19.7,
     orbitSpeed: 0.0032,
     color: "#7dd3fc",
     description:
-      "Hành tinh băng khổng lồ quay nghiêng gần như nằm ngang so với mặt phẳng quỹ đạo.",
+      "An ice giant that rotates almost sideways relative to its orbital plane.",
     facts: [
-      "Độ nghiêng trục khoảng 98 độ tạo ra mùa rất dài.",
-      "Màu xanh lam đến từ methane trong khí quyển.",
+      "Its axial tilt of about 98 degrees creates very long seasons.",
+      "Its blue-green color comes from methane in the atmosphere.",
     ],
     diameter: "50.724 km",
-    distanceFromSun: "2,87 tỷ km",
-    orbitalPeriod: "84 năm",
+    distanceFromSun: "2.87 billion km",
+    orbitalPeriod: "84 years",
   },
   {
     id: "neptune",
-    name: "Sao Hải Vương",
+    name: "Neptune",
     radius: 1.32,
     orbitRadius: 22.8,
     orbitSpeed: 0.0026,
     color: "#2563eb",
     description:
-      "Hành tinh xa nhất trong nhóm tám hành tinh, có gió cực mạnh và màu xanh sâu.",
+      "The farthest of the eight planets, with powerful winds and a deep blue color.",
     facts: [
-      "Gió trên Sao Hải Vương có thể đạt tốc độ siêu âm.",
-      "Một năm trên Sao Hải Vương dài khoảng 165 năm Trái Đất.",
+      "Winds on Neptune can reach supersonic speeds.",
+      "A year on Neptune lasts about 165 Earth years.",
     ],
     diameter: "49.244 km",
-    distanceFromSun: "4,5 tỷ km",
-    orbitalPeriod: "165 năm",
+    distanceFromSun: "4.5 billion km",
+    orbitalPeriod: "165 years",
   },
 ];
 
@@ -196,11 +196,7 @@ function jsonForHtml(value: unknown) {
 
 function isSolarSystemPrompt(prompt: string) {
   const lower = prompt.toLowerCase();
-  return (
-    lower.includes("solar system") ||
-    lower.includes("hệ mặt trời") ||
-    lower.includes("he mat troi")
-  );
+  return lower.includes("solar system");
 }
 
 export function createSandboxedLessonArtifact(input: {
@@ -210,17 +206,17 @@ export function createSandboxedLessonArtifact(input: {
   const spec: SandboxedLessonSpec = isSolarSystemPrompt(input.prompt)
     ? {
         kind: "solar-system",
-        title: "Khám phá hệ Mặt Trời",
+        title: "Explore the Solar System",
         prompt: input.prompt,
         summary:
-          "Quan sát Mặt Trời và tám hành tinh, phóng to từng hành tinh để tìm hiểu đặc điểm nổi bật.",
+          "Observe the Sun and eight planets, then zoom in on each planet to learn its defining features.",
         durationMinutes: input.plan.durationMinutes,
-        language: "vi",
+        language: "en",
         planets: solarPlanets,
         quiz: {
-          question: "Hành tinh nào hiện được biết là có sự sống?",
-          choices: ["Sao Kim", "Trái Đất", "Sao Hải Vương"],
-          answer: "Trái Đất",
+          question: "Which planet is currently known to support life?",
+          choices: ["Venus", "Earth", "Neptune"],
+          answer: "Earth",
         },
       }
     : {
@@ -247,7 +243,7 @@ export function createSandboxedLessonArtifact(input: {
 
 function createSolarSystemHtml(spec: SandboxedLessonSpec) {
   return `<!doctype html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -290,37 +286,37 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
 <body>
   <main class="page">
     <header>
-      <div class="kicker">Bài giảng tương tác</div>
+      <div class="kicker">Interactive lesson</div>
       <h1>${escapeHtml(spec.title)}</h1>
       <p class="summary">${escapeHtml(spec.summary)}</p>
     </header>
     <section class="experience">
       <div class="scene-wrap" data-runtime="solar-system">
-        <canvas id="solar-canvas" aria-label="Mô phỏng hệ Mặt Trời 3D"></canvas>
+        <canvas id="solar-canvas" aria-label="3D solar system simulation"></canvas>
         <div class="toolbar">
-          <span class="hint">Kéo để xoay · Cuộn để zoom · Click một hành tinh</span>
-          <button class="reset" id="reset-view" type="button">Toàn cảnh</button>
+          <span class="hint">Drag to rotate · Scroll to zoom · Click a planet</span>
+          <button class="reset" id="reset-view" type="button">Overview</button>
         </div>
       </div>
       <aside>
-        <p class="kicker">Đang chọn</p>
-        <h2 class="planet-title" id="planet-name">Toàn cảnh</h2>
-        <p class="planet-description" id="planet-description">Click vào một hành tinh để phóng to và đọc thông tin chi tiết.</p>
+        <p class="kicker">Selected view</p>
+        <h2 class="planet-title" id="planet-name">Overview</h2>
+        <p class="planet-description" id="planet-description">Click a planet to zoom in and read detailed information.</p>
         <dl>
-          <dt>Đường kính</dt><dd id="planet-diameter">—</dd>
-          <dt>Khoảng cách</dt><dd id="planet-distance">—</dd>
-          <dt>Chu kỳ quỹ đạo</dt><dd id="planet-period">—</dd>
+          <dt>Diameter</dt><dd id="planet-diameter">—</dd>
+          <dt>Distance</dt><dd id="planet-distance">—</dd>
+          <dt>Orbital period</dt><dd id="planet-period">—</dd>
         </dl>
-        <ul id="planet-facts"><li>Hệ Mặt Trời gồm Mặt Trời, tám hành tinh và nhiều thiên thể nhỏ.</li></ul>
+        <ul id="planet-facts"><li>The solar system includes the Sun, eight planets, and many smaller bodies.</li></ul>
         <div class="planet-list" id="planet-list"></div>
       </aside>
     </section>
     <section class="quiz">
       <div class="quiz-card">
-        <p class="kicker">Câu hỏi nhanh</p>
-        <h2>${escapeHtml(spec.quiz?.question ?? "Bạn nhớ điều gì nhất?")}</h2>
+        <p class="kicker">Quick check</p>
+        <h2>${escapeHtml(spec.quiz?.question ?? "What do you remember most?")}</h2>
         <p>${(spec.quiz?.choices ?? []).map((choice) => `<button type="button">${escapeHtml(choice)}</button>`).join(" ")}</p>
-        <p>Đáp án: <span class="answer">${escapeHtml(spec.quiz?.answer ?? "")}</span></p>
+        <p>Answer: <span class="answer">${escapeHtml(spec.quiz?.answer ?? "")}</span></p>
       </div>
     </section>
   </main>
