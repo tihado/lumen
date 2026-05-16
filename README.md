@@ -33,7 +33,7 @@ These partners power the hackathon stack.
 ## Architecture
 
 <p align="center">
-  <img src="imgs/architecture.png" alt="Lumen architecture diagram" width="780">
+  <img src="imgs/architecture.svg" alt="Lumen architecture diagram" width="1100">
 </p>
 
 ### Next.js App Router
@@ -42,10 +42,12 @@ These partners power the hackathon stack.
 | ----- | ---------------- |
 | **`src/app/studio/`** | Teacher workspace: transcript, NDJSON consumer, canvas, save/publish flow |
 | **`src/app/api/*/route.ts`** | **Route Handlers** — no provider secrets in the browser |
-| **`src/lib/orchestrator/generate-lesson.ts`** | Stages: Tavily → Pioneer → OpenAI plan → fal media → SLNG narration metadata; yields `StreamEvent`s |
-| **`src/db/`** | **Drizzle** + **postgres** driver — lessons, versions, generation runs |
+| **`src/lib/orchestrator/generate-lesson.ts`** | Ordered stages: SLNG intake hint → Tavily (2 queries) + citations → Pioneer extract → OpenAI `generateLessonPlan` → patch loop (`lesson_patch` / `lesson_snapshot` over NDJSON) → **fal** `Promise.all` media + S3 mirror → SLNG TTS + S3 → OpenAI `generateLessonRuntimeScript` → sandboxed HTML + `saveLessonVersion`; yields `StreamEvent`s |
+| **`src/db/`** | **Drizzle** + **postgres** — `lessons`, `lesson_versions`, `generation_runs` |
 
 When **S3** env vars are set, generated **fal** assets and **SLNG** audio can be mirrored for stable `https` URLs (see `src/lib/media/s3-storage.ts`).
+
+Vector diagram **`imgs/architecture.svg`** matches this file; zoom stays crisp on GitHub.
 
 ### NDJSON generation stream
 
