@@ -92,3 +92,31 @@ body {
   color: var(--primary-foreground);
   background: oklch(0.62 0.13 176 / 72%);
 }
+
+@keyframes studio-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(2deg);
+  }
+}
+
+@keyframes studio-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.91 0.085 84 / 55%);
+  }
+  50% {
+    box-shadow: 0 0 0 6px oklch(0.91 0.085 84 / 0%);
+  }
+}
+
+.studio-bob {
+  animation: studio-bob 5s ease-in-out infinite;
+}
+
+.studio-pulse {
+  animation: studio-pulse 1.8s ease-in-out infinite;
+}
