@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Canvas Teacher AI",
+  title: "Lumen Studio",
   description:
-    "Voice-first lesson authoring: structured canvas, grounded sources, and a student lesson preview.",
+    "A playful lesson authoring studio for grounded, editable teaching materials.",
 };
 
 export default function RootLayout({
