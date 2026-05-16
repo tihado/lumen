@@ -8,15 +8,11 @@
 
 **Lumen** is a **voice-first lesson authoring** web app. A teacher speaks or types a lesson intent; the **Next.js** server orchestrates **OpenAI**, **Tavily**, **Pioneer**, **fal**, and **SLNG**, streams progress to the browser as **NDJSON**, and fills an **editable canvas** backed by **PostgreSQL** (Drizzle). Missing API keys gracefully fall back to deterministic demo content so you can still explore the UI.
 
-<p align="center">
-  <strong>Repository:</strong> <code>next-learning</code> (npm) · <a href="https://github.com/tihado/next-learn">github.com/tihado/next-learn</a>
-</p>
-
 ### Screenshots
 
 <p align="center">
-  <img src="imgs/dashboard.png" alt="Lumen home and dashboard" width="280"><br>
-  <img src="imgs/class.png" alt="Lumen studio and lesson canvas" width="280">
+  <img src="imgs/dashboard.png" alt="Lumen home and dashboard" width="580"><br>
+  <img src="imgs/class.png" alt="Lumen studio and lesson canvas" width="580">
 </p>
 
 <p align="center"><sub>Raster <code>.png</code> captures. SVG sources: <code>imgs/logo.svg</code>, <code>imgs/architecture.svg</code>.</sub></p>
