@@ -562,19 +562,19 @@ export function StudioClient({
   }, [lesson, savedLessonId, transcript]);
 
   return (
-    <div className="relative mx-auto flex h-dvh min-h-0 w-full max-w-7xl flex-col gap-5 overflow-hidden p-3 sm:p-4">
+    <div className="relative flex h-dvh min-h-0 w-full flex-col gap-4 overflow-hidden p-3 sm:p-4">
       <div className="mask-[linear-gradient(to_bottom,black,transparent_88%)] pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.35_0.07_185/0.055)_1px,transparent_1px),linear-gradient(90deg,oklch(0.35_0.07_185/0.045)_1px,transparent_1px)] bg-size-[44px_44px]" />
       <div className="pointer-events-none absolute top-20 -left-8 -z-10 size-24 rounded-full border-18 border-[oklch(0.82_0.14_76/0.28)]" />
       <div className="pointer-events-none absolute top-7 -right-10 -z-10 size-36 rounded-full border-22 border-[oklch(0.82_0.12_201/0.24)]" />
 
-      <div className="relative overflow-hidden rounded-[1.75rem] border border-white/75 bg-white/62 px-4 py-4 shadow-[0_24px_80px_oklch(0.42_0.08_180/0.16)] ring-1 ring-foreground/5 backdrop-blur-2xl sm:px-5">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,oklch(0.78_0.17_48),oklch(0.76_0.15_170),oklch(0.78_0.15_330))]" />
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="relative overflow-hidden rounded-[1.35rem] border border-white/75 bg-white/62 px-3 py-2.5 shadow-[0_18px_54px_oklch(0.42_0.08_180/0.14)] ring-1 ring-foreground/5 backdrop-blur-2xl sm:px-4">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,oklch(0.78_0.17_48),oklch(0.76_0.15_170),oklch(0.78_0.15_330))]" />
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/">
               <Image
                 alt="Lumen - Light any lesson"
-                className="h-12 w-auto"
+                className="h-9 w-auto"
                 height={48}
                 priority
                 src="/logo.png"
@@ -582,10 +582,10 @@ export function StudioClient({
               />
             </Link>
             <div className="min-w-0">
-              <h1 className="font-semibold text-2xl tracking-tight sm:text-3xl">
+              <h1 className="font-semibold text-xl tracking-tight sm:text-2xl">
                 Studio
               </h1>
-              <p className="max-w-2xl text-muted-foreground text-sm">
+              <p className="max-w-2xl text-muted-foreground text-xs sm:text-sm">
                 The calm way to plan a lesson — every step visible, nothing
                 hidden.
               </p>
@@ -626,9 +626,9 @@ export function StudioClient({
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,340px)_1fr]">
-        <div className="flex min-h-0 flex-col gap-4">
-          <Card className="border-white/80 bg-white/80 shadow-[0_22px_70px_oklch(0.47_0.09_180/0.14)]">
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:grid-cols-[minmax(290px,320px)_minmax(0,1fr)_minmax(300px,360px)]">
+        <div className="flex min-h-0 flex-col">
+          <Card className="min-h-0 flex-1 border-white/80 bg-white/80 shadow-[0_22px_70px_oklch(0.47_0.09_180/0.14)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <WandSparkles className="size-4 text-primary" />
@@ -638,15 +638,15 @@ export function StudioClient({
                 Chat with the planner to draft and revise the canvas.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <ScrollArea className="h-[220px] rounded-2xl border border-white/70 bg-white/70">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+              <ScrollArea className="min-h-[12rem] flex-1 rounded-2xl border border-white/70 bg-white/70">
                 <div className="space-y-3 p-3">
                   {chatMessages.length === 0 ? (
-                    <div className="flex gap-2 text-sm">
+                    <div className="flex min-w-0 gap-2 text-sm">
                       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                         <Bot className="size-3.5" />
                       </span>
-                      <div className="rounded-2xl bg-white px-3 py-2 text-muted-foreground shadow-sm">
+                      <div className="min-w-0 rounded-2xl bg-white px-3 py-2 text-muted-foreground shadow-sm [overflow-wrap:anywhere]">
                         What lesson should we build first?
                       </div>
                     </div>
@@ -654,7 +654,7 @@ export function StudioClient({
                     chatMessages.map((message) => (
                       <div
                         className={cn(
-                          "flex gap-2 text-sm",
+                          "flex min-w-0 gap-2 text-sm",
                           message.role === "user" && "justify-end"
                         )}
                         key={message.id}
@@ -666,7 +666,7 @@ export function StudioClient({
                         ) : null}
                         <div
                           className={cn(
-                            "max-w-[86%] rounded-2xl px-3 py-2 shadow-sm",
+                            "min-w-0 max-w-[86%] rounded-2xl px-3 py-2 shadow-sm [overflow-wrap:anywhere]",
                             message.role === "user"
                               ? "bg-primary text-primary-foreground"
                               : "bg-white text-muted-foreground"
@@ -776,135 +776,6 @@ export function StudioClient({
               ) : null}
             </CardContent>
           </Card>
-
-          <Card className="min-h-0 flex-1 overflow-hidden border-white/80 bg-white/78 shadow-[0_22px_70px_oklch(0.47_0.09_180/0.12)]">
-            <CardHeader className="py-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BookOpenCheck className="size-4 text-primary" />
-                Build trail
-              </CardTitle>
-              <CardDescription>
-                A cheerful trace of who made what.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-              <ScrollArea className="min-h-0 flex-1">
-                <div className="min-w-0 max-w-full space-y-2 overflow-hidden p-4">
-                  {timeline.length === 0 ? (
-                    <div className="rounded-2xl border border-primary/25 border-dashed bg-[linear-gradient(135deg,oklch(0.97_0.04_95/0.82),oklch(0.96_0.035_185/0.7))] p-4 text-sm">
-                      <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-white/75 text-primary shadow-sm">
-                        <Play className="size-4" />
-                      </div>
-                      <p className="font-medium">Ready when you are.</p>
-                      <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
-                        Run generation to watch Tavily, Pioneer, fal, and the
-                        lesson builder light up one by one.
-                      </p>
-                    </div>
-                  ) : (
-                    timeline.map((row) => {
-                      const hasProblem = Boolean(
-                        row.usedFallback || row.problem
-                      );
-                      const statusLabel =
-                        row.status === "completed" && row.usedFallback
-                          ? "fallback"
-                          : row.status === "completed" && row.problem
-                            ? "review"
-                            : row.status;
-
-                      return (
-                        <div
-                          className={cn(
-                            "relative w-full min-w-0 max-w-full overflow-hidden rounded-2xl border px-3 py-2.5 text-xs shadow-sm transition-transform hover:-translate-y-0.5",
-                            hasProblem
-                              ? "border-yellow-500/45 bg-[linear-gradient(135deg,white,oklch(0.96_0.07_88/0.8))]"
-                              : row.status === "completed"
-                                ? "border-primary/18 bg-[linear-gradient(135deg,white,oklch(0.96_0.045_150/0.76))]"
-                                : "border-accent/45 bg-[linear-gradient(135deg,white,oklch(0.965_0.055_75/0.72))]"
-                          )}
-                          key={row.key}
-                        >
-                          <div
-                            className={cn(
-                              "pointer-events-none absolute -top-5 -right-5 size-14 rounded-full",
-                              hasProblem ? "bg-yellow-500/10" : "bg-primary/8"
-                            )}
-                          />
-                          <div className="flex min-w-0 items-center justify-between gap-2">
-                            <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-                              <span
-                                className={cn(
-                                  "size-2.5 shrink-0 rounded-full",
-                                  hasProblem
-                                    ? "bg-yellow-500"
-                                    : row.status === "completed"
-                                      ? "bg-primary"
-                                      : "bg-accent",
-                                  row.status === "running" && "studio-pulse"
-                                )}
-                              />
-                              <span className="min-w-0 truncate">
-                                {row.provider}
-                              </span>
-                            </span>
-                            <Badge
-                              className={cn(
-                                "shrink-0",
-                                row.status === "running" &&
-                                  "border-accent/70 bg-accent/15",
-                                hasProblem &&
-                                  "border-yellow-500/60 bg-yellow-100 text-yellow-950"
-                              )}
-                              variant={
-                                hasProblem
-                                  ? "outline"
-                                  : row.status === "completed"
-                                    ? "secondary"
-                                    : "outline"
-                              }
-                            >
-                              {row.status === "running" ? (
-                                <Loader2 className="animate-spin" />
-                              ) : null}
-                              {statusLabel}
-                            </Badge>
-                          </div>
-                          {row.label ? (
-                            <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-words text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
-                              {row.label}
-                            </p>
-                          ) : null}
-                          {row.detail ? (
-                            <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-words text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box]">
-                              {row.detail}
-                            </p>
-                          ) : null}
-                          {hasProblem ? (
-                            <p className="mt-2 flex max-w-full items-start gap-1.5 overflow-hidden whitespace-normal break-words rounded-xl border border-yellow-500/30 bg-yellow-50/80 px-2 py-1.5 text-[10px] text-yellow-950">
-                              <TriangleAlert className="mt-0.5 size-3 shrink-0" />
-                              <span>
-                                {row.problem ??
-                                  "This step used a fallback path."}
-                              </span>
-                            </p>
-                          ) : null}
-                          {row.usedFallback === undefined ? null : (
-                            <p className="mt-1 text-[10px] text-muted-foreground">
-                              Mode:{" "}
-                              {row.usedFallback
-                                ? "fallback / demo"
-                                : "live provider"}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
@@ -948,6 +819,132 @@ export function StudioClient({
             </Card>
           )}
         </div>
+
+        <Card className="flex min-h-[22rem] min-w-0 max-w-full overflow-hidden border-white/80 bg-white/78 shadow-[0_22px_70px_oklch(0.47_0.09_180/0.12)] lg:col-span-2 xl:col-span-1 xl:min-h-0">
+          <CardHeader className="py-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpenCheck className="size-4 text-primary" />
+              Build trail
+            </CardTitle>
+            <CardDescription>
+              A cheerful trace of who made what.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+            <ScrollArea className="min-h-0 min-w-0 max-w-full flex-1 overflow-hidden">
+              <div className="w-full min-w-0 max-w-full space-y-2 overflow-hidden p-4">
+                {timeline.length === 0 ? (
+                  <div className="w-full min-w-0 max-w-full rounded-2xl border border-primary/25 border-dashed bg-[linear-gradient(135deg,oklch(0.97_0.04_95/0.82),oklch(0.96_0.035_185/0.7))] p-4 text-sm">
+                    <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-white/75 text-primary shadow-sm">
+                      <Play className="size-4" />
+                    </div>
+                    <p className="font-medium">Ready when you are.</p>
+                    <p className="mt-1 text-muted-foreground text-xs leading-relaxed [overflow-wrap:anywhere]">
+                      Run generation to watch Tavily, Pioneer, fal, and the
+                      lesson builder light up one by one.
+                    </p>
+                  </div>
+                ) : (
+                  timeline.map((row) => {
+                    const hasProblem = Boolean(row.usedFallback || row.problem);
+                    const statusLabel =
+                      row.status === "completed" && row.usedFallback
+                        ? "fallback"
+                        : row.status === "completed" && row.problem
+                          ? "review"
+                          : row.status;
+
+                    return (
+                      <div
+                        className={cn(
+                          "relative w-full min-w-0 max-w-full overflow-hidden rounded-2xl border px-3 py-2.5 text-xs shadow-sm transition-transform hover:-translate-y-0.5",
+                          hasProblem
+                            ? "border-yellow-500/45 bg-[linear-gradient(135deg,white,oklch(0.96_0.07_88/0.8))]"
+                            : row.status === "completed"
+                              ? "border-primary/18 bg-[linear-gradient(135deg,white,oklch(0.96_0.045_150/0.76))]"
+                              : "border-accent/45 bg-[linear-gradient(135deg,white,oklch(0.965_0.055_75/0.72))]"
+                        )}
+                        key={row.key}
+                      >
+                        <div
+                          className={cn(
+                            "pointer-events-none absolute -top-5 -right-5 size-14 rounded-full",
+                            hasProblem ? "bg-yellow-500/10" : "bg-primary/8"
+                          )}
+                        />
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+                            <span
+                              className={cn(
+                                "size-2.5 shrink-0 rounded-full",
+                                hasProblem
+                                  ? "bg-yellow-500"
+                                  : row.status === "completed"
+                                    ? "bg-primary"
+                                    : "bg-accent",
+                                row.status === "running" && "studio-pulse"
+                              )}
+                            />
+                            <span className="min-w-0 truncate">
+                              {row.provider}
+                            </span>
+                          </span>
+                          <Badge
+                            className={cn(
+                              "shrink-0",
+                              row.status === "running" &&
+                                "border-accent/70 bg-accent/15",
+                              hasProblem &&
+                                "border-yellow-500/60 bg-yellow-100 text-yellow-950"
+                            )}
+                            variant={
+                              hasProblem
+                                ? "outline"
+                                : row.status === "completed"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {row.status === "running" ? (
+                              <Loader2 className="animate-spin" />
+                            ) : null}
+                            {statusLabel}
+                          </Badge>
+                        </div>
+                        {row.label ? (
+                          <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-words text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box] [overflow-wrap:anywhere]">
+                            {row.label}
+                          </p>
+                        ) : null}
+                        {row.detail ? (
+                          <p className="mt-1 max-w-full overflow-hidden whitespace-normal break-words text-muted-foreground [-webkit-box-orient:vertical] [-webkit-line-clamp:5] [display:-webkit-box] [overflow-wrap:anywhere]">
+                            {row.detail}
+                          </p>
+                        ) : null}
+                        {hasProblem ? (
+                          <p className="mt-2 flex max-w-full items-start gap-1.5 overflow-hidden whitespace-normal break-words rounded-xl border border-yellow-500/30 bg-yellow-50/80 px-2 py-1.5 text-[10px] text-yellow-950 [overflow-wrap:anywhere]">
+                            <TriangleAlert className="mt-0.5 size-3 shrink-0" />
+                            <span className="min-w-0">
+                              {row.problem ?? "This step used a fallback path."}
+                            </span>
+                          </p>
+                        ) : null}
+                        {row.usedFallback === undefined ? null : (
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            Mode:{" "}
+                            {row.usedFallback
+                              ? "fallback / demo"
+                              : "live provider"}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

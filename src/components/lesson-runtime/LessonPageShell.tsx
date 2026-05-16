@@ -174,7 +174,7 @@ export function LessonPageShell({ doc }: { doc: LessonDocument }) {
 
   return (
     <>
-      <div className="mx-auto max-w-3xl space-y-10 px-4 py-12">
+      <div className="w-full space-y-10 px-4 py-12 sm:px-6 lg:px-8">
         <header className="space-y-3">
           <p className="text-muted-foreground text-xs uppercase tracking-wide">
             Student lesson

@@ -25,7 +25,7 @@ export default async function LessonsPage() {
   }
 
   return (
-    <main className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10">
+    <main className="relative flex w-full flex-1 flex-col gap-6 px-4 py-10 sm:px-6 lg:px-8">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.42_0.05_180/0.045)_1px,transparent_1px),linear-gradient(90deg,oklch(0.42_0.05_180/0.04)_1px,transparent_1px)] bg-[size:42px_42px]" />
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/50 px-4 py-4 shadow-sm backdrop-blur-xl">
         <div>

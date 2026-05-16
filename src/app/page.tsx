@@ -27,7 +27,7 @@ export default function Home() {
       <div className="pointer-events-none absolute top-8 -right-10 size-36 rounded-full border-[22px] border-[oklch(0.82_0.12_201/0.24)]" />
 
       <header className="relative z-10 px-3 pt-4 sm:px-4">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-white/75 bg-white/62 px-4 py-3 shadow-[0_24px_80px_oklch(0.42_0.08_180/0.16)] ring-1 ring-foreground/5 backdrop-blur-2xl">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-white/75 bg-white/62 px-4 py-3 shadow-[0_24px_80px_oklch(0.42_0.08_180/0.16)] ring-1 ring-foreground/5 backdrop-blur-2xl">
           <Link className="flex items-center" href="/">
             <Image
               alt="Lumen - Light any lesson"
@@ -63,7 +63,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-10 sm:py-14">
+      <main className="relative z-10 flex w-full flex-1 flex-col gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <section className="grid min-h-[calc(100vh-9rem)] items-center gap-8 lg:grid-cols-[minmax(0,1.02fr)_minmax(360px,0.98fr)]">
           <div className="max-w-2xl space-y-5">
             <p className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/65 px-3 py-1 font-medium text-muted-foreground text-xs shadow-sm backdrop-blur-xl">
