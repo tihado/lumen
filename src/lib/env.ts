@@ -12,6 +12,7 @@ const envSchema = z.object({
   PIONEER_API_KEY: z.string().optional(),
   SLNG_API_KEY: z.string().optional(),
   SLNG_API_BASE_URL: z.string().url().optional(),
+  DATABASE_URL: z.string().url().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema> & {
@@ -28,6 +29,7 @@ function readRawEnv(): Record<string, string | undefined> {
     PIONEER_API_KEY: process.env.PIONEER_API_KEY,
     SLNG_API_KEY: process.env.SLNG_API_KEY,
     SLNG_API_BASE_URL: process.env.SLNG_API_BASE_URL,
+    DATABASE_URL: process.env.DATABASE_URL,
   };
 }
 

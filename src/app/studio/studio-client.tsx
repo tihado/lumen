@@ -2,6 +2,7 @@
 
 import { ExternalLink, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { CanvasWorkspace } from "@/components/canvas/CanvasWorkspace";
 import { SourcesDrawer } from "@/components/canvas/SourcesDrawer";
@@ -19,7 +20,6 @@ import { Separator } from "@/components/ui/separator";
 import { VoiceSessionController } from "@/components/voice/VoiceSessionController";
 import { applyLessonPatch } from "@/lib/lesson/patches";
 import type { LessonDocument, LessonNode } from "@/lib/lesson/schema";
-import { saveLessonToLocal } from "@/lib/lesson/storage";
 import {
   type ProviderReadiness,
   parseStreamEventLine,
@@ -36,8 +36,9 @@ type TimelineRow = {
 };
 
 export function StudioClient() {
+  const router = useRouter();
   const [transcript, setTranscript] = useState(
-    "Create a 20-minute photosynthesis lesson for grade 6 with a misconception check and a short quiz."
+    "tôi muốn tìm hiểu về hệ mặt trời"
   );
   const [lesson, setLesson] = useState<LessonDocument | null>(null);
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
@@ -46,6 +47,7 @@ export function StudioClient() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaRetryingId, setMediaRetryingId] = useState<string | null>(null);
+  const [savedLessonId, setSavedLessonId] = useState<string | null>(null);
 
   const readinessBadges = useMemo(() => {
     if (!readiness) {
@@ -85,6 +87,8 @@ export function StudioClient() {
     setTimeline([]);
     setLesson(null);
     setSelectedId(null);
+    setSavedLessonId(null);
+    let completedLessonId: string | null = null;
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -138,14 +142,21 @@ export function StudioClient() {
           if (ev.type === "run_failed") {
             setError(ev.message);
           }
+          if (ev.type === "run_completed") {
+            completedLessonId = ev.lessonId;
+            setSavedLessonId(ev.lessonId);
+          }
         }
+      }
+      if (completedLessonId) {
+        router.push(`/lesson/${completedLessonId}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [pushTimeline, transcript]);
+  }, [pushTimeline, router, transcript]);
 
   const onReplaceNode = useCallback((node: LessonNode) => {
     setLesson((prev) => {
@@ -211,13 +222,12 @@ export function StudioClient() {
     [lesson]
   );
 
-  const publishPreview = useCallback(() => {
-    if (!lesson) {
+  const openSavedLesson = useCallback(() => {
+    if (!savedLessonId) {
       return;
     }
-    saveLessonToLocal(lesson);
-    window.open(`/lesson/${lesson.id}`, "_blank", "noopener,noreferrer");
-  }, [lesson]);
+    router.push(`/lesson/${savedLessonId}`);
+  }, [router, savedLessonId]);
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4 p-4">
@@ -235,6 +245,12 @@ export function StudioClient() {
             href="/"
           >
             Home
+          </Link>
+          <Link
+            className={cn(buttonVariants({ size: "sm", variant: "ghost" }))}
+            href="/lessons"
+          >
+            Saved lessons
           </Link>
           <Link
             className={cn(
@@ -359,12 +375,12 @@ export function StudioClient() {
             {lesson ? <SourcesDrawer doc={lesson} /> : null}
             <Separator className="hidden h-6 lg:block" orientation="vertical" />
             <Button
-              disabled={!lesson}
-              onClick={publishPreview}
+              disabled={!savedLessonId}
+              onClick={openSavedLesson}
               type="button"
               variant="secondary"
             >
-              Publish preview
+              Open saved lesson
             </Button>
           </div>
           {lesson ? (

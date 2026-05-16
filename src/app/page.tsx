@@ -14,16 +14,24 @@ export default function Home() {
     <div className="relative flex flex-1 flex-col overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,oklch(0.55_0.2_264/0.25),transparent)]" />
       <header className="relative z-10 border-border/60 border-b bg-card/40 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4">
           <span className="font-semibold text-sm tracking-tight">
             Canvas Teacher AI
           </span>
-          <Link
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-            href="/studio"
-          >
-            Open studio
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              className={buttonVariants({ size: "sm", variant: "ghost" })}
+              href="/lessons"
+            >
+              Saved lessons
+            </Link>
+            <Link
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              href="/studio"
+            >
+              Open studio
+            </Link>
+          </div>
         </div>
       </header>
       <main className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-10 px-4 py-16">
@@ -53,9 +61,9 @@ export default function Home() {
             </Link>
             <Link
               className={buttonVariants({ size: "lg", variant: "outline" })}
-              href="/lesson/demo"
+              href="/lessons"
             >
-              View sample lesson
+              View saved lessons
             </Link>
           </div>
         </div>
@@ -83,9 +91,9 @@ export default function Home() {
           <Card size="sm">
             <CardHeader>
               <ArrowRight className="size-5 text-primary" />
-              <CardTitle className="text-base">Publish preview</CardTitle>
+              <CardTitle className="text-base">Saved previews</CardTitle>
               <CardDescription>
-                Save locally and open a guided student lesson at{" "}
+                Save to Postgres and open a guided student lesson at{" "}
                 <code className="rounded bg-muted px-1 py-0.5 text-xs">
                   /lesson/[id]
                 </code>

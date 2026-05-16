@@ -5,6 +5,14 @@ import { applyLessonPatch } from "@/lib/lesson/patches";
 import type { Citation } from "@/lib/lesson/schema";
 import { createEmptyLesson } from "@/lib/lesson/schema";
 import { isSafeHttpsUrl } from "@/lib/url";
+import { createSandboxedLessonArtifact } from "../lesson/html-artifact";
+import {
+  createGeneratingLesson,
+  createGenerationRun,
+  finishGenerationRun,
+  markLessonFailed,
+  saveLessonVersion,
+} from "../lesson/repository";
 import { falGenerateImage, fallbackFalImage } from "./providers/fal";
 import { fallbackLessonPlan, generateLessonPlan } from "./providers/llm";
 import {
@@ -59,6 +67,7 @@ export async function* generateLessonStream(input: {
   const runId = nanoid(12);
   const lessonId = input.lessonId ?? nanoid(10);
   const topic = topicFromTranscript(input.transcript);
+  let generationRunCreated = false;
 
   yield {
     type: "run_started",
@@ -68,6 +77,18 @@ export async function* generateLessonStream(input: {
   };
 
   try {
+    await createGeneratingLesson({
+      id: lessonId,
+      title: topic,
+      prompt: input.transcript,
+    });
+    await createGenerationRun({
+      id: runId,
+      lessonId,
+      transcript: input.transcript,
+    });
+    generationRunCreated = true;
+
     let doc = createEmptyLesson({
       id: lessonId,
       title: topic,
@@ -392,7 +413,7 @@ export async function* generateLessonStream(input: {
     yield {
       type: "provider_completed",
       runId,
-      stepId: s3,
+      stepId: s4,
       provider: "orchestrator",
       detail: "Lesson nodes materialized",
     };
@@ -450,9 +471,48 @@ export async function* generateLessonStream(input: {
       usedFallback: falUsedFallback,
     };
 
+    const s6 = step();
+    yield {
+      type: "provider_started",
+      runId,
+      stepId: s6,
+      provider: "orchestrator",
+      label: "Persist sandboxed HTML lesson",
+    };
+    const artifact = createSandboxedLessonArtifact({
+      prompt: input.transcript,
+      plan: lessonPlan,
+    });
+    await saveLessonVersion({
+      lessonId,
+      title: artifact.title,
+      html: artifact.html,
+      spec: artifact.spec as unknown as Record<string, unknown>,
+    });
+    await finishGenerationRun({ id: runId, status: "completed" });
+    yield {
+      type: "provider_completed",
+      runId,
+      stepId: s6,
+      provider: "orchestrator",
+      detail: "Saved HTML lesson version to Postgres",
+    };
+
     yield { type: "run_completed", runId, lessonId };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    if (generationRunCreated) {
+      try {
+        await finishGenerationRun({
+          id: runId,
+          status: "failed",
+          error: message,
+        });
+        await markLessonFailed({ lessonId, error: message });
+      } catch {
+        /* keep original generation error */
+      }
+    }
     yield { type: "run_failed", runId, message };
   }
 }
