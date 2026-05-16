@@ -3,7 +3,6 @@
 import {
   BookOpenCheck,
   ExternalLink,
-  FlaskConical,
   Home,
   LibraryBig,
   Loader2,
@@ -12,6 +11,7 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -386,13 +386,17 @@ export function StudioClient({
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,oklch(0.78_0.17_48),oklch(0.76_0.15_170),oklch(0.78_0.15_330))]" />
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="studio-bob flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,oklch(0.74_0.15_172),oklch(0.83_0.14_88))] text-white shadow-[0_14px_30px_oklch(0.55_0.12_170/0.22)]">
-              <FlaskConical className="size-6" />
-            </div>
+            <Link href="/">
+              <Image
+                alt="Lumen - Light any lesson"
+                className="h-12 w-auto"
+                height={48}
+                priority
+                src="/logo.png"
+                width={120}
+              />
+            </Link>
             <div className="min-w-0">
-              <p className="font-medium text-[0.68rem] text-primary uppercase tracking-[0.18em]">
-                Lumen
-              </p>
               <h1 className="font-semibold text-2xl tracking-tight sm:text-3xl">
                 Studio
               </h1>

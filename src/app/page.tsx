@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   BookOpenCheck,
-  FlaskConical,
   LibraryBig,
   Mic,
   Palette,
@@ -9,6 +8,7 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -28,18 +28,15 @@ export default function Home() {
 
       <header className="relative z-10 px-3 pt-4 sm:px-4">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-white/75 bg-white/62 px-4 py-3 shadow-[0_24px_80px_oklch(0.42_0.08_180/0.16)] ring-1 ring-foreground/5 backdrop-blur-2xl">
-          <Link className="flex items-center gap-3" href="/">
-            <span className="studio-bob flex size-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,oklch(0.74_0.15_172),oklch(0.83_0.14_88))] text-white shadow-[0_14px_30px_oklch(0.55_0.12_170/0.22)]">
-              <FlaskConical className="size-5" />
-            </span>
-            <span>
-              <span className="block font-medium text-[0.64rem] text-primary uppercase tracking-[0.18em]">
-                Voice-first lessons
-              </span>
-              <span className="block font-semibold text-lg tracking-tight">
-                Lumen
-              </span>
-            </span>
+          <Link className="flex items-center" href="/">
+            <Image
+              alt="Lumen - Light any lesson"
+              className="h-14 w-auto"
+              height={56}
+              priority
+              src="/logo.png"
+              width={140}
+            />
           </Link>
           <div className="flex items-center gap-2">
             <Link
