@@ -150,6 +150,14 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).toContain("/lesson-runtime/solar-system.v1.js");
     expect(artifact.html).toContain("Click the Sun or a planet");
     expect(artifact.html).toContain("Earth");
+    expect(artifact.html).toContain("What is gravity?");
+    expect(artifact.html).toContain("9.81 m/s²");
+    expect(
+      artifact.spec.planets?.find((planet) => planet.id === "jupiter")
+    ).toMatchObject({
+      surfaceGravity: "24.79 m/s²",
+      gravityComparedToEarth: "2.53 x Earth",
+    });
   });
 
   it("embeds generated JavaScript for static lessons", () => {

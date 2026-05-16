@@ -9,7 +9,86 @@ if (!(dataEl && canvas && root)) {
 }
 
 const lesson = JSON.parse(dataEl.textContent || "{}");
-const planets = Array.isArray(lesson.planets) ? lesson.planets : [];
+const planetGravityDefaults = {
+  mercury: {
+    surfaceGravity: "3.7 m/s²",
+    gravityComparedToEarth: "0.38 x Earth",
+    gravityNote:
+      "Mercury is small, so you would weigh much less there even though it is dense for its size.",
+    extraFact:
+      "Sunrise on Mercury can appear to stop, reverse, and rise again because of its slow spin and fast orbit.",
+  },
+  venus: {
+    surfaceGravity: "8.87 m/s²",
+    gravityComparedToEarth: "0.90 x Earth",
+    gravityNote:
+      "Venus is almost Earth's twin in size, so its surface gravity feels surprisingly familiar.",
+    extraFact: "One day on Venus is longer than one Venus year.",
+  },
+  earth: {
+    surfaceGravity: "9.81 m/s²",
+    gravityComparedToEarth: "1.00 x Earth",
+    gravityNote:
+      "Earth is our reference point: one Earth gravity is the pull your body is adapted to every day.",
+    extraFact:
+      "Earth's gravity helps hold the atmosphere and oceans that make life possible.",
+  },
+  mars: {
+    surfaceGravity: "3.71 m/s²",
+    gravityComparedToEarth: "0.38 x Earth",
+    gravityNote:
+      "Mars gravity is close to Mercury's, so jumping and carrying objects would feel much easier than on Earth.",
+    extraFact:
+      "Mars has two tiny moons, Phobos and Deimos, that may be captured asteroids.",
+  },
+  jupiter: {
+    surfaceGravity: "24.79 m/s²",
+    gravityComparedToEarth: "2.53 x Earth",
+    gravityNote:
+      "Jupiter's gravity is enormous because it is so massive, even though its visible surface is really cloud tops.",
+    extraFact:
+      "Its magnetic field is the strongest of any planet in the solar system.",
+  },
+  saturn: {
+    surfaceGravity: "10.44 m/s²",
+    gravityComparedToEarth: "1.06 x Earth",
+    gravityNote:
+      "Saturn is huge but low-density, so gravity near its cloud tops is only a little stronger than Earth's.",
+    extraFact: "Its rings are wide but extremely thin compared with the planet.",
+  },
+  uranus: {
+    surfaceGravity: "8.69 m/s²",
+    gravityComparedToEarth: "0.89 x Earth",
+    gravityNote:
+      "Uranus is larger than Earth, but its lower density keeps surface gravity slightly weaker than ours.",
+    extraFact: "Uranus was the first planet discovered with a telescope.",
+  },
+  neptune: {
+    surfaceGravity: "11.15 m/s²",
+    gravityComparedToEarth: "1.14 x Earth",
+    gravityNote:
+      "Neptune is an ice giant with a strong pull, but it is still far gentler than Jupiter.",
+    extraFact: "Neptune was predicted mathematically before it was directly observed.",
+  },
+};
+
+const planets = Array.isArray(lesson.planets)
+  ? lesson.planets.map((planet) => {
+      const defaults = planetGravityDefaults[planet.id] || {};
+      const facts = Array.isArray(planet.facts) ? [...planet.facts] : [];
+      if (defaults.extraFact && !facts.includes(defaults.extraFact)) {
+        facts.push(defaults.extraFact);
+      }
+      return {
+        ...planet,
+        surfaceGravity: planet.surfaceGravity || defaults.surfaceGravity,
+        gravityComparedToEarth:
+          planet.gravityComparedToEarth || defaults.gravityComparedToEarth,
+        gravityNote: planet.gravityNote || defaults.gravityNote,
+        facts,
+      };
+    })
+  : [];
 const sunInfo = {
   id: "sun",
   name: "Sun",
@@ -24,6 +103,10 @@ const sunInfo = {
   diameter: "1.39 million km",
   distanceFromSun: "Center of the system",
   orbitalPeriod: "About 25-35 days rotation",
+  surfaceGravity: "274 m/s²",
+  gravityComparedToEarth: "28 x Earth",
+  gravityNote:
+    "The Sun's gravity dominates the whole solar system; without it, the planets would not stay in orbit.",
 };
 
 const runtimeStyles = document.createElement("style");
@@ -140,6 +223,12 @@ runtimeStyles.textContent = `
     border-top: 1px solid rgba(172, 190, 220, .16);
     font-size: 11px;
   }
+  [data-runtime="solar-system"] .planet-popover-gravity {
+    margin: 0;
+    color: #ffe8a3;
+    font-size: 12px;
+    line-height: 1.45;
+  }
   [data-runtime="solar-system"] .planet-popover-meta span:nth-child(odd) {
     color: #a9b5c8;
   }
@@ -201,6 +290,24 @@ runtimeStyles.textContent = `
   dd {
     color: #edf5ff;
     font-weight: 760;
+  }
+  .gravity-panel {
+    display: grid;
+    gap: 8px;
+    margin: -2px 0 22px;
+    padding: 14px;
+    border: 1px solid rgba(103, 232, 249, .2);
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(103, 232, 249, .1), rgba(255, 209, 102, .06));
+  }
+  .gravity-panel strong {
+    color: #f8fafc;
+  }
+  .gravity-panel p {
+    margin: 0;
+    color: #dbeafe;
+    font-size: 13px;
+    line-height: 1.55;
   }
   li::marker {
     color: #67e8f9;
@@ -790,6 +897,8 @@ const descriptionEl = document.getElementById("planet-description");
 const diameterEl = document.getElementById("planet-diameter");
 const distanceEl = document.getElementById("planet-distance");
 const periodEl = document.getElementById("planet-period");
+const gravityEl = document.getElementById("planet-gravity");
+const gravityNoteEl = document.getElementById("gravity-note");
 const factsEl = document.getElementById("planet-facts");
 const listEl = document.getElementById("planet-list");
 const resetBtn = document.getElementById("reset-view");
@@ -811,7 +920,9 @@ planetPopup.innerHTML = `
       <span>Diameter</span><span data-popup-diameter></span>
       <span>Distance</span><span data-popup-distance></span>
       <span>Orbit</span><span data-popup-period></span>
+      <span>Gravity</span><span data-popup-gravity></span>
     </div>
+    <p class="planet-popover-gravity"></p>
   </div>
 `;
 root.appendChild(planetPopup);
@@ -821,7 +932,16 @@ const popupDescriptionEl = planetPopup.querySelector(".planet-popover-descriptio
 const popupDiameterEl = planetPopup.querySelector("[data-popup-diameter]");
 const popupDistanceEl = planetPopup.querySelector("[data-popup-distance]");
 const popupPeriodEl = planetPopup.querySelector("[data-popup-period]");
+const popupGravityEl = planetPopup.querySelector("[data-popup-gravity]");
+const popupGravityNoteEl = planetPopup.querySelector(".planet-popover-gravity");
 const popupCloseBtn = planetPopup.querySelector(".planet-popover-close");
+
+function getGravitySummary(body) {
+  if (!(body.surfaceGravity || body.gravityComparedToEarth)) {
+    return "—";
+  }
+  return [body.surfaceGravity, body.gravityComparedToEarth].filter(Boolean).join(" · ");
+}
 
 function setActiveButton() {
   for (const button of listEl?.querySelectorAll("button") || []) {
@@ -844,6 +964,14 @@ function updateDetails(body) {
   }
   if (periodEl) {
     periodEl.textContent = body.orbitalPeriod;
+  }
+  if (gravityEl) {
+    gravityEl.textContent = getGravitySummary(body);
+  }
+  if (gravityNoteEl) {
+    gravityNoteEl.textContent =
+      body.gravityNote ||
+      "Gravity is the attractive force between objects with mass. Bigger and denser worlds usually pull more strongly.";
   }
   if (factsEl) {
     factsEl.innerHTML = "";
@@ -870,6 +998,12 @@ function updatePopupDetails(body) {
   }
   if (popupPeriodEl) {
     popupPeriodEl.textContent = body.orbitalPeriod;
+  }
+  if (popupGravityEl) {
+    popupGravityEl.textContent = getGravitySummary(body);
+  }
+  if (popupGravityNoteEl) {
+    popupGravityNoteEl.textContent = body.gravityNote || "";
   }
 }
 
@@ -986,9 +1120,16 @@ function resetView() {
   if (periodEl) {
     periodEl.textContent = "—";
   }
+  if (gravityEl) {
+    gravityEl.textContent = "—";
+  }
+  if (gravityNoteEl) {
+    gravityNoteEl.textContent =
+      "Gravity is the attractive force between objects with mass. Bigger and denser worlds usually pull more strongly, so the same student would weigh different amounts on different planets.";
+  }
   if (factsEl) {
     factsEl.innerHTML =
-      "<li>The solar system includes the Sun, eight planets, and many smaller bodies.</li>";
+      "<li>The solar system includes the Sun, eight planets, and many smaller bodies.</li><li>Compare gravity values to predict where jumping, walking, or launching a rocket would be easiest.</li>";
   }
   hidePlanetPopup();
   setActiveButton();
