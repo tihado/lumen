@@ -108,6 +108,35 @@ const sunInfo = {
   gravityNote:
     "The Sun's gravity dominates the whole solar system; without it, the planets would not stay in orbit.",
 };
+const defaultSolarQuizItems = [
+  {
+    question: "Which planet is currently known to support life?",
+    choices: ["Venus", "Earth", "Neptune"],
+    answer: "Earth",
+    explanation:
+      "Earth is the right answer because it has stable liquid water, a protective atmosphere, and ecosystems we can directly observe.",
+    funFact:
+      "Earth is the only world we know with rain, oceans, clouds, and living things all moving through the same water cycle.",
+  },
+  {
+    question: "What does a planet orbit in our solar system?",
+    choices: ["The Sun", "A comet", "Earth's Moon"],
+    answer: "The Sun",
+    explanation:
+      "Planets in the solar system orbit the Sun because the Sun contains almost all of the system's mass and has the strongest gravitational pull.",
+    funFact:
+      "The Sun holds about 99.8% of the mass in the solar system, so everything else is tiny by comparison.",
+  },
+  {
+    question: "Which force helps keep planets moving in orbit?",
+    choices: ["Gravity", "Sound", "Friction"],
+    answer: "Gravity",
+    explanation:
+      "Gravity pulls each planet toward the Sun while the planet's forward motion keeps it from falling straight in.",
+    funFact:
+      "An orbit is a kind of continuous fall: the planet keeps falling around the Sun instead of into it.",
+  },
+];
 
 const runtimeStyles = document.createElement("style");
 runtimeStyles.textContent = `
@@ -370,9 +399,88 @@ runtimeStyles.textContent = `
     background: linear-gradient(180deg, rgba(255, 209, 102, .2), rgba(103, 232, 249, .08));
     transform: translateY(-1px);
   }
+  [data-solar-quiz] {
+    border-color: rgba(172, 190, 220, .18);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, .72);
+    padding: 20px;
+  }
+  [data-solar-quiz] h2 {
+    margin: 10px 0 8px;
+  }
+  [data-solar-quiz] .summary {
+    max-width: 760px;
+    margin: 0;
+    color: #d5deed;
+    line-height: 1.6;
+  }
+  .quiz-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+  }
+  .quiz-question {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    min-height: 100%;
+    border: 1px solid rgba(172, 190, 220, .16);
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(8, 15, 31, .84), rgba(2, 6, 23, .68));
+    padding: 16px;
+  }
+  .quiz-question h3 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 17px;
+    line-height: 1.35;
+  }
+  .quiz-options {
+    display: grid;
+    gap: 8px;
+  }
+  .quiz-feedback {
+    display: none;
+    border: 1px solid rgba(103, 232, 249, .18);
+    border-radius: 8px;
+    background: rgba(103, 232, 249, .08);
+    color: #dbeafe;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .quiz-feedback strong {
+    color: #f8fafc;
+  }
+  .quiz-question[data-answered="true"] .quiz-feedback {
+    display: grid;
+    gap: 6px;
+  }
+  .quiz-question[data-result="correct"] .quiz-feedback {
+    border-color: rgba(34, 197, 94, .32);
+    background: rgba(34, 197, 94, .1);
+  }
+  .quiz-question[data-result="wrong"] .quiz-feedback {
+    border-color: rgba(251, 113, 133, .36);
+    background: rgba(251, 113, 133, .1);
+  }
+  .quiz-option.is-correct {
+    border-color: rgba(34, 197, 94, .86);
+    color: #dcfce7;
+    background: linear-gradient(180deg, rgba(34, 197, 94, .24), rgba(34, 197, 94, .09));
+  }
+  .quiz-option.is-wrong {
+    border-color: rgba(251, 113, 133, .86);
+    color: #ffe4e6;
+    background: linear-gradient(180deg, rgba(251, 113, 133, .22), rgba(251, 113, 133, .08));
+  }
   @media (max-width: 860px) {
     .planet-list {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .quiz-grid {
+      grid-template-columns: 1fr;
     }
   }
   @media (max-width: 560px) {
@@ -928,6 +1036,8 @@ let selectedType = null;
 let distance = 34;
 let theta = -0.85;
 let phi = 1.04;
+const selectedPlanetDistanceMultiplier = 10;
+const selectedPlanetMinDistance = 10;
 const target = new THREE.Vector3(0, 0, 0);
 const desiredTarget = new THREE.Vector3(0, 0, 0);
 
@@ -1128,7 +1238,10 @@ function selectPlanet(id) {
   if (!(planet && mesh)) {
     return;
   }
-  distance = Math.max(planet.radius * 7, 7);
+  distance = Math.max(
+    planet.radius * selectedPlanetDistanceMultiplier,
+    selectedPlanetMinDistance
+  );
   selectedRing.material.opacity = 0.78;
   selectedRing.scale.setScalar(planet.radius * 1.75);
   updateDetails(planet);
@@ -1192,6 +1305,128 @@ if (listEl) {
   }
 }
 
+function getSolarQuizItems() {
+  const customItems = Array.isArray(lesson.quizItems) ? lesson.quizItems : [];
+  const validItems = customItems.filter(
+    (item) =>
+      item &&
+      typeof item.question === "string" &&
+      Array.isArray(item.choices) &&
+      typeof item.answer === "string"
+  );
+  const items = [];
+  for (const item of [...validItems, ...defaultSolarQuizItems]) {
+    if (items.some((existing) => existing.question === item.question)) {
+      continue;
+    }
+    items.push({
+      question: item.question,
+      choices: item.choices,
+      answer: item.answer,
+      explanation:
+        item.explanation ||
+        "This answer matches the model and the lesson details above.",
+      funFact:
+        item.funFact ||
+        "A good astronomer checks the evidence, then looks for one more surprising detail.",
+    });
+    if (items.length === 3) {
+      break;
+    }
+  }
+  return items;
+}
+
+function renderSolarQuiz() {
+  const quizRoot =
+    document.querySelector("[data-solar-quiz]") ||
+    document.querySelector(".quiz-card");
+  if (!quizRoot) {
+    return;
+  }
+
+  quizRoot.dataset.solarQuiz = "true";
+  quizRoot.innerHTML = "";
+
+  const kicker = document.createElement("p");
+  kicker.className = "kicker";
+  kicker.textContent = "Quick check";
+  quizRoot.appendChild(kicker);
+
+  const heading = document.createElement("h2");
+  heading.textContent = "Test your orbit instincts";
+  quizRoot.appendChild(heading);
+
+  const intro = document.createElement("p");
+  intro.className = "summary";
+  intro.textContent =
+    "Choose an answer to reveal the result, the reason, and a curious detail.";
+  quizRoot.appendChild(intro);
+
+  const grid = document.createElement("div");
+  grid.className = "quiz-grid";
+  quizRoot.appendChild(grid);
+
+  getSolarQuizItems().forEach((item, index) => {
+    const article = document.createElement("article");
+    article.className = "quiz-question";
+    article.dataset.answered = "false";
+
+    const title = document.createElement("h3");
+    title.textContent = `${index + 1}. ${item.question}`;
+    article.appendChild(title);
+
+    const options = document.createElement("div");
+    options.className = "quiz-options";
+    article.appendChild(options);
+
+    const feedback = document.createElement("div");
+    feedback.className = "quiz-feedback";
+    feedback.setAttribute("aria-live", "polite");
+    article.appendChild(feedback);
+
+    for (const choice of item.choices) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "quiz-option";
+      button.textContent = choice;
+      button.addEventListener("click", () => {
+        const isCorrect = choice === item.answer;
+        article.dataset.answered = "true";
+        article.dataset.result = isCorrect ? "correct" : "wrong";
+
+        for (const option of options.querySelectorAll("button")) {
+          option.disabled = true;
+          option.classList.toggle("is-correct", option.textContent === item.answer);
+          option.classList.toggle(
+            "is-wrong",
+            option === button && !isCorrect
+          );
+        }
+
+        feedback.innerHTML = "";
+        const result = document.createElement("strong");
+        result.textContent = isCorrect
+          ? "Correct."
+          : `Not quite. The answer is ${item.answer}.`;
+        feedback.appendChild(result);
+
+        const explanation = document.createElement("span");
+        explanation.textContent = item.explanation;
+        feedback.appendChild(explanation);
+
+        const funFact = document.createElement("span");
+        funFact.textContent = `Interesting fact: ${item.funFact}`;
+        feedback.appendChild(funFact);
+      });
+      options.appendChild(button);
+    }
+
+    grid.appendChild(article);
+  });
+}
+
+renderSolarQuiz();
 resetBtn?.addEventListener("click", resetView);
 popupCloseBtn?.addEventListener("click", hidePlanetPopup);
 

@@ -37,6 +37,17 @@ export const sandboxedLessonSpecSchema = z.object({
       answer: z.string(),
     })
     .optional(),
+  quizItems: z
+    .array(
+      z.object({
+        question: z.string(),
+        choices: z.array(z.string()),
+        answer: z.string(),
+        explanation: z.string(),
+        funFact: z.string(),
+      })
+    )
+    .optional(),
   studio: z.unknown().optional(),
 });
 
@@ -258,6 +269,36 @@ const solarPlanets: NonNullable<SandboxedLessonSpec["planets"]> = [
   },
 ];
 
+const solarQuizItems: NonNullable<SandboxedLessonSpec["quizItems"]> = [
+  {
+    question: "Which planet is currently known to support life?",
+    choices: ["Venus", "Earth", "Neptune"],
+    answer: "Earth",
+    explanation:
+      "Earth is the right answer because it has stable liquid water, a protective atmosphere, and ecosystems we can directly observe.",
+    funFact:
+      "Earth is the only world we know with rain, oceans, clouds, and living things all moving through the same water cycle.",
+  },
+  {
+    question: "What does a planet orbit in our solar system?",
+    choices: ["The Sun", "A comet", "Earth's Moon"],
+    answer: "The Sun",
+    explanation:
+      "Planets in the solar system orbit the Sun because the Sun contains almost all of the system's mass and has the strongest gravitational pull.",
+    funFact:
+      "The Sun holds about 99.8% of the mass in the solar system, so everything else is tiny by comparison.",
+  },
+  {
+    question: "Which force helps keep planets moving in orbit?",
+    choices: ["Gravity", "Sound", "Friction"],
+    answer: "Gravity",
+    explanation:
+      "Gravity pulls each planet toward the Sun while the planet's forward motion keeps it from falling straight in.",
+    funFact:
+      "An orbit is a kind of continuous fall: the planet keeps falling around the Sun instead of into it.",
+  },
+];
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -296,10 +337,11 @@ export function createSandboxedLessonArtifact(input: {
         language: "en",
         planets: solarPlanets,
         quiz: {
-          question: "Which planet is currently known to support life?",
-          choices: ["Venus", "Earth", "Neptune"],
-          answer: "Earth",
+          question: solarQuizItems[0].question,
+          choices: solarQuizItems[0].choices,
+          answer: solarQuizItems[0].answer,
         },
+        quizItems: solarQuizItems,
       }
     : {
         kind: "static-lesson",
@@ -371,12 +413,22 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
     .planet-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 22px; }
     .quiz { max-width: 1180px; margin: 0 auto; padding: 0 clamp(18px, 5vw, 64px) 64px; }
     .quiz-card { border: 1px solid var(--line); border-radius: 8px; background: rgba(15, 23, 42, .72); padding: 20px; }
-    .answer { color: var(--gold); font-weight: 700; }
+    .quiz-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+    .quiz-question { display: grid; align-content: start; gap: 12px; min-height: 100%; border: 1px solid rgba(172, 190, 220, .16); border-radius: 8px; background: linear-gradient(180deg, rgba(8, 15, 31, .84), rgba(2, 6, 23, .68)); padding: 16px; }
+    .quiz-question h3 { margin: 0; color: #f8fafc; font-size: 17px; line-height: 1.35; }
+    .quiz-options { display: grid; gap: 8px; }
+    .quiz-feedback { display: none; border-radius: 8px; padding: 12px; color: #dbeafe; background: rgba(103, 232, 249, .08); border: 1px solid rgba(103, 232, 249, .18); font-size: 13px; line-height: 1.55; }
+    .quiz-question[data-answered="true"] .quiz-feedback { display: grid; gap: 6px; }
+    .quiz-question[data-result="correct"] .quiz-feedback { border-color: rgba(34, 197, 94, .32); background: rgba(34, 197, 94, .1); }
+    .quiz-question[data-result="wrong"] .quiz-feedback { border-color: rgba(251, 113, 133, .36); background: rgba(251, 113, 133, .1); }
+    .quiz-option.is-correct { border-color: rgba(34, 197, 94, .86); color: #dcfce7; background: linear-gradient(180deg, rgba(34, 197, 94, .24), rgba(34, 197, 94, .09)); }
+    .quiz-option.is-wrong { border-color: rgba(251, 113, 133, .86); color: #ffe4e6; background: linear-gradient(180deg, rgba(251, 113, 133, .22), rgba(251, 113, 133, .08)); }
     @keyframes solar-stars-twinkle { 0%, 100% { opacity: .58; filter: brightness(.86) drop-shadow(0 0 2px rgba(255,255,255,.16)); } 45% { opacity: .94; filter: brightness(1.34) drop-shadow(0 0 7px rgba(191,219,254,.4)); } 72% { opacity: .72; filter: brightness(1.05) drop-shadow(0 0 4px rgba(255,244,214,.28)); } }
     @media (max-width: 860px) {
       .experience { grid-template-columns: 1fr; }
       .scene-wrap, #solar-canvas { min-height: 520px; }
       .planet-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .quiz-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 560px) {
       header { padding-top: 24px; }
@@ -421,11 +473,10 @@ function createSolarSystemHtml(spec: SandboxedLessonSpec) {
       </aside>
     </section>
     <section class="quiz">
-      <div class="quiz-card">
+      <div class="quiz-card" data-solar-quiz>
         <p class="kicker">Quick check</p>
-        <h2>${escapeHtml(spec.quiz?.question ?? "What do you remember most?")}</h2>
-        <p>${(spec.quiz?.choices ?? []).map((choice) => `<button type="button">${escapeHtml(choice)}</button>`).join(" ")}</p>
-        <p>Answer: <span class="answer">${escapeHtml(spec.quiz?.answer ?? "")}</span></p>
+        <h2>Test your orbit instincts</h2>
+        <p class="summary">Choose an answer to reveal the result, the reason, and a curious detail.</p>
       </div>
     </section>
   </main>

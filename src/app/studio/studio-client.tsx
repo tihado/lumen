@@ -396,9 +396,9 @@ export function StudioClient({
 
   return (
     <div className="relative mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-5 p-3 sm:p-4">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.35_0.07_185/0.055)_1px,transparent_1px),linear-gradient(90deg,oklch(0.35_0.07_185/0.045)_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:linear-gradient(to_bottom,black,transparent_88%)]" />
-      <div className="pointer-events-none absolute top-20 -left-8 -z-10 size-24 rounded-full border-[18px] border-[oklch(0.82_0.14_76/0.28)]" />
-      <div className="pointer-events-none absolute top-7 -right-10 -z-10 size-36 rounded-full border-[22px] border-[oklch(0.82_0.12_201/0.24)]" />
+      <div className="mask-[linear-gradient(to_bottom,black,transparent_88%)] pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(oklch(0.35_0.07_185/0.055)_1px,transparent_1px),linear-gradient(90deg,oklch(0.35_0.07_185/0.045)_1px,transparent_1px)] bg-size-[44px_44px]" />
+      <div className="pointer-events-none absolute top-20 -left-8 -z-10 size-24 rounded-full border-18 border-[oklch(0.82_0.14_76/0.28)]" />
+      <div className="pointer-events-none absolute top-7 -right-10 -z-10 size-36 rounded-full border-22 border-[oklch(0.82_0.12_201/0.24)]" />
 
       <div className="relative overflow-hidden rounded-[1.75rem] border border-white/75 bg-white/62 px-4 py-4 shadow-[0_24px_80px_oklch(0.42_0.08_180/0.16)] ring-1 ring-foreground/5 backdrop-blur-2xl sm:px-5">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,oklch(0.78_0.17_48),oklch(0.76_0.15_170),oklch(0.78_0.15_330))]" />
