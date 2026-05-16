@@ -713,6 +713,19 @@ export async function* generateLessonStream(input: {
           return generated;
         });
 
+        const width =
+          planned.modality === "image" &&
+          "width" in stored &&
+          typeof stored.width === "number"
+            ? stored.width
+            : undefined;
+        const height =
+          planned.modality === "image" &&
+          "height" in stored &&
+          typeof stored.height === "number"
+            ? stored.height
+            : undefined;
+
         const node = {
           id: planned.nodeId,
           type: "media" as const,
@@ -723,14 +736,8 @@ export async function* generateLessonStream(input: {
           asset: {
             url: stored.url,
             mime: stored.mime,
-            width:
-              planned.modality === "image" && "width" in stored
-                ? stored.width
-                : undefined,
-            height:
-              planned.modality === "image" && "height" in stored
-                ? stored.height
-                : undefined,
+            ...(width === undefined ? {} : { width }),
+            ...(height === undefined ? {} : { height }),
           },
           provenance: {
             provider: "fal" as const,

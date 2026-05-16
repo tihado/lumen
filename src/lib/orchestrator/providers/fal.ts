@@ -14,6 +14,34 @@ export type FalVideoResult = {
   fileSize?: number;
 };
 
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function imageRequestBody(model: string, prompt: string) {
+  if (model === "fal-ai/nano-banana-2") {
+    return {
+      prompt,
+      num_images: 1,
+      aspect_ratio: "4:3",
+      output_format: "png",
+      safety_tolerance: "4",
+      sync_mode: false,
+      resolution: "1K",
+      limit_generations: true,
+      enable_web_search: false,
+    };
+  }
+
+  return {
+    prompt,
+    image_size: "landscape_4_3",
+    num_images: 1,
+  };
+}
+
 /**
  * Submits a fal image job (sync fal.run endpoint). Override model with FAL_IMAGE_MODEL.
  */
@@ -38,11 +66,7 @@ export async function falGenerateImage(
       Authorization: `Key ${key}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      prompt,
-      image_size: "landscape_4_3",
-      num_images: 1,
-    }),
+    body: JSON.stringify(imageRequestBody(model, prompt)),
   });
   console.info("[fal] image response received", {
     model,
@@ -60,7 +84,12 @@ export async function falGenerateImage(
     throw new Error(`fal HTTP ${res.status}: ${text.slice(0, 240)}`);
   }
   const data = (await res.json()) as {
-    images?: Array<{ url: string; width?: number; height?: number }>;
+    images?: Array<{
+      url: string;
+      content_type?: string;
+      width?: unknown;
+      height?: unknown;
+    }>;
   };
   const img = data.images?.[0];
   if (!img?.url) {
@@ -70,17 +99,19 @@ export async function falGenerateImage(
     });
     throw new Error("fal response missing images[0].url");
   }
+  const width = optionalNumber(img.width);
+  const height = optionalNumber(img.height);
   console.info("[fal] image ready", {
     model,
-    width: img.width,
-    height: img.height,
+    width,
+    height,
     durationMs: Date.now() - startedAt,
   });
   return {
     url: img.url,
-    mime: "image/png",
-    width: img.width,
-    height: img.height,
+    mime: img.content_type ?? "image/png",
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
   };
 }
 

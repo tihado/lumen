@@ -262,17 +262,26 @@ export function StudioClient({
           body: JSON.stringify({ prompt, modality: node.modality }),
         });
         const data = (await res.json()) as {
-          asset: { url: string; mime: string; width?: number; height?: number };
+          asset: {
+            url: string;
+            mime: string;
+            width?: unknown;
+            height?: unknown;
+          };
           usedFallback?: boolean;
         };
+        const width =
+          typeof data.asset.width === "number" ? data.asset.width : undefined;
+        const height =
+          typeof data.asset.height === "number" ? data.asset.height : undefined;
         const nextNode = {
           ...node,
           status: "ready" as const,
           asset: {
             url: data.asset.url,
             mime: data.asset.mime,
-            width: data.asset.width,
-            height: data.asset.height,
+            ...(width === undefined ? {} : { width }),
+            ...(height === undefined ? {} : { height }),
           },
           provenance: {
             provider: "fal" as const,
