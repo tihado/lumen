@@ -389,6 +389,22 @@ function styleForHtml(value: string) {
   return value.replace(/<\/style/gi, "<\\/style");
 }
 
+function replaceOrInsertBeforeCloseTag(input: {
+  html: string;
+  pattern: RegExp;
+  replacement: string;
+  closeTag: string;
+}) {
+  if (input.pattern.test(input.html)) {
+    return input.html.replace(input.pattern, input.replacement);
+  }
+  const closeIndex = input.html.lastIndexOf(input.closeTag);
+  if (closeIndex === -1) {
+    throw new Error(`Sandboxed lesson HTML is missing ${input.closeTag}.`);
+  }
+  return `${input.html.slice(0, closeIndex)}  ${input.replacement}\n${input.html.slice(closeIndex)}`;
+}
+
 function isSolarSystemPrompt(prompt: string) {
   const lower = prompt.toLowerCase();
   return lower.includes("solar system");
@@ -575,17 +591,23 @@ function createStaticLessonTemplateRuntimeScript(runtimeScript?: string) {
   const templateRuntime = `
 const root = document.querySelector("[data-runtime='static-lesson']");
 if (root) {
-  root.querySelectorAll("[data-objective-toggle]").forEach((button) => {
-    button.addEventListener("click", () => {
+  root.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const objectiveToggle = target.closest("[data-objective-toggle]");
+    if (objectiveToggle && root.contains(objectiveToggle)) {
+      const button = objectiveToggle;
       const pressed = button.getAttribute("aria-pressed") === "true";
       button.setAttribute("aria-pressed", String(!pressed));
       button.classList.toggle("is-complete", !pressed);
-    });
-  });
+      return;
+    }
 
-  root.querySelectorAll("[data-quiz-choice]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const scope = button.closest("article") ?? root;
+    const quizChoice = target.closest("[data-quiz-choice]");
+    if (quizChoice && root.contains(quizChoice)) {
+      const button = quizChoice;
+      const scope = button.closest("[data-quiz-card]") ?? button.closest("article") ?? root;
       const answer = scope.querySelector("[data-quiz-answer]");
       const feedback = scope.querySelector("[data-quiz-feedback]");
       const isCorrect = button.textContent?.trim() === answer?.textContent?.trim();
@@ -596,11 +618,12 @@ if (root) {
       if (feedback) {
         feedback.textContent = isCorrect ? "Correct. Nice reasoning." : "Try again, then compare with the answer.";
       }
-    });
-  });
+      return;
+    }
 
-  root.querySelectorAll("[data-classify-choice]").forEach((button) => {
-    button.addEventListener("click", () => {
+    const classifyChoice = target.closest("[data-classify-choice]");
+    if (classifyChoice && root.contains(classifyChoice)) {
+      const button = classifyChoice;
       const card = button.closest("[data-classify-card]");
       if (!card) return;
       const picked = button.getAttribute("data-classify-choice")?.split(":").pop();
@@ -613,7 +636,7 @@ if (root) {
       if (result) {
         result.textContent = picked === answer ? "Correct. Explain why this card fits." : "Try the other category, then explain the difference.";
       }
-    });
+    }
   });
 
   const dataElement = document.getElementById("lesson-data");
@@ -622,6 +645,7 @@ if (root) {
   const entityDetails = root.querySelector("[data-entity-details]");
   const entityBreadcrumb = root.querySelector("[data-entity-breadcrumb]");
   const entityTooltip = root.querySelector("[data-entity-tooltip]");
+  const resetButton = root.querySelector("[data-canvas-reset]");
 
   let lessonData = {};
   try {
@@ -641,6 +665,7 @@ if (root) {
   };
   const schemaData = lessonData?.schemaData && typeof lessonData.schemaData === "object" ? lessonData.schemaData : {};
   const student = lessonData?.student && typeof lessonData.student === "object" ? lessonData.student : {};
+  const mediaData = lessonData?.media && typeof lessonData.media === "object" ? lessonData.media : {};
   const schemaEntities = Array.isArray(schemaData.entities) ? schemaData.entities : [];
   const vocabularyEntities = Array.isArray(student.keyVocabulary)
     ? student.keyVocabulary.map((item) => ({
@@ -651,6 +676,8 @@ if (root) {
     : [];
   const entityInput = schemaEntities.length > 0 ? schemaEntities : vocabularyEntities;
   const maxEntityNestingLevel = ${MAX_ENTITY_NESTING_LEVEL};
+
+  const hasChildren = (entity) => Array.isArray(entity.children) && entity.children.length > 0;
 
   const normalizeEntity = (value, index, path, level = 1) => {
     const record = value && typeof value === "object" ? value : { label: String(value ?? "") };
@@ -677,19 +704,154 @@ if (root) {
       kind,
       summary,
       children,
+      source: "schema",
     };
   };
+
+  const makeNode = (id, label, kind, summary, children = [], extra = {}) => ({
+    id,
+    label: asText(label, "Untitled"),
+    kind: asText(kind, "lesson"),
+    summary: shortText(summary, "Open this card to explore the connected idea."),
+    children: children.filter(Boolean),
+    ...extra,
+  });
+
+  const mediaAssets = Array.isArray(mediaData.assets) ? mediaData.assets : [];
+  const mediaNodes = mediaAssets.map((asset, index) =>
+    makeNode(
+      "media-" + index,
+      asset?.title ?? asset?.alt ?? "Lesson media " + (index + 1),
+      asset?.modality ?? "media",
+      asset?.alt ?? "Generated lesson media.",
+      [],
+      {
+        media: {
+          url: asText(asset?.url),
+          mime: asText(asset?.mime),
+          alt: asText(asset?.alt, asset?.title ?? "Lesson media"),
+          modality: asText(asset?.modality, "image"),
+        },
+      }
+    )
+  );
+
+  const objectiveNodes = Array.isArray(student.objectives)
+    ? student.objectives.map((item, index) =>
+        makeNode("objective-" + index, "Goal " + (index + 1), "objective", item, [], {
+          objective: asText(item),
+        })
+      )
+    : [];
+
+  const exploreNodes = Array.isArray(student.exploreSteps)
+    ? student.exploreSteps.map((item, index) =>
+        makeNode(
+          "explore-" + index,
+          item?.title ?? "Explore step " + (index + 1),
+          item?.segment ?? "explore",
+          item?.action ?? "Observe and explain what changes.",
+          []
+        )
+      )
+    : [];
+
+  const vocabularyNodes = Array.isArray(student.keyVocabulary)
+    ? student.keyVocabulary.map((item, index) =>
+        makeNode(
+          "vocabulary-" + index,
+          item?.term ?? "Vocabulary " + (index + 1),
+          "term",
+          item?.definition ?? "Key vocabulary for this lesson.",
+          []
+        )
+      )
+    : [];
+
+  const explanationNodes = Array.isArray(student.explanationSections)
+    ? student.explanationSections.map((item, index) =>
+        makeNode(
+          "explain-" + index,
+          item?.title ?? "Idea " + (index + 1),
+          "concept",
+          item?.body ?? "Core idea from the lesson plan.",
+          []
+        )
+      )
+    : [];
+
+  const activity = student.activity && typeof student.activity === "object" ? student.activity : {};
+  const activityNodes = [
+    ...(Array.isArray(activity.strongItems)
+      ? activity.strongItems.map((item, index) =>
+          makeNode("activity-strong-" + index, item, activity.strongFitLabel ?? "strong fit", activity.instruction, [], {
+            activityItem: {
+              label: asText(item),
+              answer: "strong",
+              strongFitLabel: asText(activity.strongFitLabel, "Strong fit"),
+              weakFitLabel: asText(activity.weakFitLabel, "Weak fit"),
+            },
+          })
+        )
+      : []),
+    ...(Array.isArray(activity.weakItems)
+      ? activity.weakItems.map((item, index) =>
+          makeNode("activity-weak-" + index, item, activity.weakFitLabel ?? "weak fit", activity.instruction, [], {
+            activityItem: {
+              label: asText(item),
+              answer: "weak",
+              strongFitLabel: asText(activity.strongFitLabel, "Strong fit"),
+              weakFitLabel: asText(activity.weakFitLabel, "Weak fit"),
+            },
+          })
+        )
+      : []),
+  ];
+
+  const quiz = student.quiz && typeof student.quiz === "object" ? student.quiz : {};
+  const quizNodes = Array.isArray(quiz.items)
+    ? quiz.items.map((item, index) =>
+        makeNode("quiz-" + index, "Question " + (index + 1), "knowledge check", item?.stem, [], {
+          quizItem: {
+            stem: asText(item?.stem, "Choose the best answer."),
+            choices: Array.isArray(item?.choices) ? item.choices.map((choice) => asText(choice)).filter(Boolean) : [],
+            answer: asText(item?.answer),
+            explanation: asText(item?.explanation, "Use the lesson evidence to explain your answer."),
+          },
+        })
+      )
+    : [];
+
+  const schemaNodes = entityInput
+    .map((entity, index) => normalizeEntity(entity, index, "entity", 1))
+    .filter(Boolean);
+
+  const topLevelNodes = [
+    ...mediaNodes.slice(0, 3),
+    ...schemaNodes.slice(0, 6),
+    makeNode("group-goals", "Learning goals", "mission", "The outcomes this lesson is designed to make visible.", objectiveNodes),
+    makeNode("group-path", "Explore path", "sequence", "A compact path through the key observations and actions.", exploreNodes),
+    makeNode("group-ideas", "Core ideas", "concept map", "Vocabulary and explanations that unlock the lesson.", [
+      ...vocabularyNodes,
+      ...explanationNodes,
+    ]),
+    makeNode("group-activity", activity.title ?? "Practice lab", "activity", activity.instruction ?? "Classify and explain examples.", activityNodes),
+    makeNode("group-quiz", quiz.title ?? "Knowledge check", "quiz", "Choose answers and revise your reasoning.", quizNodes),
+    makeNode("group-reflect", "Reflect", "exit ticket", student.reflectionPrompt ?? "Explain what changed in your thinking.", []),
+    ...mediaNodes.slice(3),
+    ...schemaNodes.slice(6),
+  ].filter((entity) => entity.summary || hasChildren(entity) || entity.media || entity.quizItem || entity.activityItem || entity.objective);
 
   const rootEntity = {
     id: "entity-root",
     label: asText(student.title ?? lessonData.title, "Lesson schema"),
-    kind: asText(schemaData.provider, "schema"),
-    summary: shortText(student.summary ?? lessonData.summary, "Extracted entities from the lesson schema."),
-    children: entityInput
-      .map((entity, index) => normalizeEntity(entity, index, "entity", 1))
-      .filter(Boolean),
+    kind: "knowledge canvas",
+    summary: shortText(student.summary ?? lessonData.summary, "Explore the lesson as connected cards."),
+    children: topLevelNodes,
   };
   const entityStack = [rootEntity];
+  let selectedEntity = rootEntity;
+  let canvasScale = 1;
 
   const clear = (element) => {
     while (element?.firstChild) {
@@ -699,9 +861,49 @@ if (root) {
   const appendText = (element, value) => {
     element.appendChild(document.createTextNode(value));
   };
+  const appendPill = (parent, value) => {
+    const pill = document.createElement("span");
+    pill.className = "entity-chip";
+    appendText(pill, value);
+    parent.appendChild(pill);
+  };
+
+  const renderMedia = (entity, compact = false) => {
+    if (!entity.media?.url) return null;
+    const wrap = document.createElement(compact ? "span" : "figure");
+    wrap.className = compact ? "entity-node-media" : "detail-media";
+    let mediaElement;
+    if (entity.media.modality === "video") {
+      mediaElement = document.createElement("video");
+      mediaElement.src = entity.media.url;
+      mediaElement.muted = compact;
+      mediaElement.loop = compact;
+      mediaElement.playsInline = true;
+      mediaElement.preload = "metadata";
+      if (!compact) {
+        mediaElement.controls = true;
+      }
+    } else if (entity.media.modality === "audio") {
+      mediaElement = document.createElement("audio");
+      mediaElement.src = entity.media.url;
+      mediaElement.preload = "none";
+      if (!compact) {
+        mediaElement.controls = true;
+      }
+    } else {
+      mediaElement = document.createElement("img");
+      mediaElement.src = entity.media.url;
+      mediaElement.alt = entity.media.alt;
+      mediaElement.loading = "lazy";
+    }
+    mediaElement.setAttribute("aria-label", entity.media.alt);
+    wrap.appendChild(mediaElement);
+    return wrap;
+  };
 
   const renderDetails = (entity) => {
     if (!entityDetails) return;
+    selectedEntity = entity;
     clear(entityDetails);
     const kicker = document.createElement("p");
     kicker.className = "kicker";
@@ -711,6 +913,72 @@ if (root) {
     const summary = document.createElement("p");
     appendText(summary, entity.summary);
     entityDetails.append(kicker, title, summary);
+    const media = renderMedia(entity, false);
+    if (media) {
+      entityDetails.appendChild(media);
+    }
+    if (entity.objective) {
+      const row = document.createElement("div");
+      row.className = "detail-action";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("aria-pressed", "false");
+      button.setAttribute("data-objective-toggle", "");
+      appendText(button, "Mark");
+      const text = document.createElement("span");
+      appendText(text, entity.objective);
+      row.append(button, text);
+      entityDetails.appendChild(row);
+    }
+    if (entity.activityItem) {
+      const card = document.createElement("article");
+      card.className = "activity-card";
+      card.setAttribute("data-classify-card", "");
+      card.setAttribute("data-answer", entity.activityItem.answer);
+      const label = document.createElement("strong");
+      appendText(label, entity.activityItem.label);
+      const choices = document.createElement("div");
+      choices.className = "choice-row";
+      ["strong", "weak"].forEach((value) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("data-classify-choice", entity.id + ":" + value);
+        appendText(button, value === "strong" ? entity.activityItem.strongFitLabel : entity.activityItem.weakFitLabel);
+        choices.appendChild(button);
+      });
+      const result = document.createElement("p");
+      result.setAttribute("data-classify-result", "");
+      card.append(label, choices, result);
+      entityDetails.appendChild(card);
+    }
+    if (entity.quizItem) {
+      const card = document.createElement("article");
+      card.className = "quiz-card";
+      card.setAttribute("data-quiz-card", "");
+      const stem = document.createElement("h4");
+      appendText(stem, entity.quizItem.stem);
+      const choices = document.createElement("div");
+      choices.className = "choices";
+      entity.quizItem.choices.forEach((choice) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("data-quiz-choice", "");
+        appendText(button, choice);
+        choices.appendChild(button);
+      });
+      const feedback = document.createElement("p");
+      feedback.setAttribute("data-quiz-feedback", "");
+      const answer = document.createElement("p");
+      answer.className = "answer-line";
+      const answerValue = document.createElement("span");
+      answerValue.setAttribute("data-quiz-answer", "");
+      appendText(answerValue, entity.quizItem.answer);
+      answer.appendChild(answerValue);
+      const explanation = document.createElement("p");
+      appendText(explanation, entity.quizItem.explanation);
+      card.append(stem, choices, feedback, answer, explanation);
+      entityDetails.appendChild(card);
+    }
   };
 
   const showTooltip = (entity, anchor) => {
@@ -765,57 +1033,99 @@ if (root) {
     button.type = "button";
     button.className = "entity-node";
     button.setAttribute("data-entity-node", entity.id);
+    if (entity.id === selectedEntity.id) {
+      button.classList.add("is-selected");
+    }
     const label = document.createElement("span");
     label.className = "entity-node-label";
     appendText(label, entity.label);
+    const summary = document.createElement("span");
+    summary.className = "entity-node-summary";
+    appendText(summary, entity.summary);
     const meta = document.createElement("span");
     meta.className = "entity-node-meta";
-    const kind = document.createElement("span");
-    kind.className = "entity-chip";
-    appendText(kind, entity.kind);
-    meta.appendChild(kind);
-    if (entity.children.length > 0) {
-      const count = document.createElement("span");
-      count.className = "entity-chip";
-      appendText(count, String(entity.children.length) + " linked");
-      meta.appendChild(count);
+    appendPill(meta, entity.kind);
+    if (hasChildren(entity)) {
+      appendPill(meta, String(entity.children.length) + " linked");
     }
-    button.append(label, meta);
+    const media = renderMedia(entity, true);
+    if (media) {
+      button.appendChild(media);
+    }
+    button.append(label, summary, meta);
     button.addEventListener("mouseenter", () => showTooltip(entity, button));
     button.addEventListener("focus", () => showTooltip(entity, button));
     button.addEventListener("mouseleave", hideTooltip);
     button.addEventListener("blur", hideTooltip);
     button.addEventListener("click", () => {
       hideTooltip();
-      renderDetails(entity);
-      if (entity.children.length > 0) {
+      if (hasChildren(entity)) {
         entityStack.push(entity);
+        selectedEntity = entity;
         renderEntityView();
+        return;
       }
+      renderDetails(entity);
+      renderEntityCards();
     });
     return button;
   };
 
-  function renderEntityView() {
+  const sizeForCard = (entity, index, count) => {
+    if (entity.media?.modality === "image" || entity.media?.modality === "video") return "media";
+    if (index === 0 && count > 5) return "feature";
+    if (hasChildren(entity) && index % 4 === 1) return "wide";
+    if (entity.quizItem || entity.activityItem) return "compact";
+    return "standard";
+  };
+
+  function renderEntityCards() {
     if (!entityMap) return;
     const current = entityStack[entityStack.length - 1];
     clear(entityMap);
-    renderBreadcrumb();
-    renderDetails(current);
     if (current.children.length === 0) {
       const empty = document.createElement("p");
       empty.className = "lesson-copy";
-      appendText(empty, "No child entities are available for this schema node yet.");
+      appendText(empty, "No connected cards are available for this node yet.");
       entityMap.appendChild(empty);
       return;
     }
-    current.children.forEach((entity) => {
-      entityMap.appendChild(renderEntityButton(entity));
+    current.children.forEach((entity, index) => {
+      const button = renderEntityButton(entity);
+      button.setAttribute("data-card-size", sizeForCard(entity, index, current.children.length));
+      entityMap.appendChild(button);
     });
+  }
+
+  function renderEntityView() {
+    if (!entityMap) return;
+    const current = entityStack[entityStack.length - 1];
+    selectedEntity = current;
+    root.style.setProperty("--canvas-depth", String(entityStack.length - 1));
+    root.classList.add("is-zooming");
+    window.setTimeout(() => root.classList.remove("is-zooming"), 220);
+    renderBreadcrumb();
+    renderDetails(current);
+    renderEntityCards();
   }
 
   if (entitySpace && entityMap && entityDetails && entityBreadcrumb) {
     renderEntityView();
+    resetButton?.addEventListener("click", () => {
+      entityStack.splice(1);
+      canvasScale = 1;
+      entityMap.style.transform = "scale(1)";
+      renderEntityView();
+    });
+    entitySpace.addEventListener("wheel", (event) => {
+      if (event.target instanceof Element && event.target.closest("button, video, audio")) {
+        return;
+      }
+      event.preventDefault();
+      const direction = event.deltaY > 0 ? -1 : 1;
+      canvasScale = Math.min(1.16, Math.max(.86, canvasScale + direction * .04));
+      entityMap.style.transform = "scale(" + canvasScale.toFixed(2) + ")";
+    }, { passive: false });
     entitySpace.addEventListener("contextmenu", (event) => {
       const target = event.target;
       if (target instanceof Element && target.closest("[data-entity-node]")) {
@@ -883,300 +1193,124 @@ function createStaticLessonHtml(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(spec.title)}</title>
-  <style>
-    :root { color-scheme: light; --ink: #172033; --muted: #5b6475; --paper: #fffaf1; --panel: rgba(255, 255, 250, .82); --line: rgba(23, 32, 51, .16); --teal: #006d68; --mint: #d7eee7; --gold: #f3b23e; --coral: #d95562; --iris: #4f63c7; --leaf: #6f9633; --night: #171d2b; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: linear-gradient(135deg, #fff2d8 0%, #e3f5ed 42%, #f6eefc 100%); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .38; background-image: linear-gradient(rgba(23, 32, 51, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 32, 51, .055) 1px, transparent 1px); background-size: 44px 44px; }
-    main { position: relative; overflow: hidden; }
-    h1, h2, h3, p { margin-top: 0; }
-    h1, h2, h3, .kicker { letter-spacing: 0; }
-    p, li { line-height: 1.65; }
-    button { min-height: 48px; border: 1px solid rgba(23, 32, 51, .18); border-radius: 6px; background: #fffdf6; color: var(--ink); cursor: pointer; font: inherit; font-weight: 760; padding: 12px 14px; transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease; }
-    button:hover { border-color: var(--teal); transform: translateY(-1px); }
-    button.selected { border-color: var(--teal); background: var(--mint); color: #063f3d; }
-    button.correct, [data-quiz-choice].is-correct { border-color: #198754; background: #dff7e8; color: #0b5132; }
-    button.wrong, [data-quiz-choice].is-wrong { border-color: #b42338; background: #ffe4e8; color: #7a1021; }
-    [data-quiz-choice], [data-classify-choice] { flex: 1 1 170px; min-height: 58px; text-align: left; }
-    .kicker { color: var(--teal); font-size: 12px; text-transform: uppercase; font-weight: 860; }
-    .lesson-hero { position: relative; min-height: 520px; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(300px, .88fr); gap: 32px; align-items: end; max-width: 1240px; margin: 0 auto; padding: 64px 28px 44px; }
-    .lesson-hero::before { content: ""; position: absolute; inset: 24px 18px; z-index: -1; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: linear-gradient(130deg, rgba(255, 255, 255, .66), rgba(255, 255, 255, .28)), repeating-linear-gradient(135deg, rgba(0, 109, 104, .1) 0 2px, transparent 2px 18px); box-shadow: 0 30px 90px rgba(23, 32, 51, .16); }
-    .hero-copy h1 { max-width: 820px; margin: 12px 0 18px; font-size: 64px; line-height: .98; }
-    .hero-summary { max-width: 760px; color: #2d3b4f; font-size: 19px; line-height: 1.7; }
-    .lesson-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
-    .pill { display: inline-flex; align-items: center; min-height: 34px; border: 1px solid rgba(23, 32, 51, .15); border-radius: 999px; background: rgba(255, 253, 246, .78); color: #263244; padding: 7px 12px; font-size: 13px; font-weight: 760; }
-    .hero-panel { position: relative; border: 1px solid rgba(23, 32, 51, .15); border-radius: 8px; background: rgba(255, 253, 246, .86); padding: 24px; box-shadow: 0 18px 54px rgba(23, 32, 51, .14); backdrop-filter: blur(14px); }
-    .hero-panel h2 { margin-bottom: 16px; font-size: 25px; }
-    .stage { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
-    .lesson-band { border-top: 1px solid var(--line); padding: 42px 0; }
-    .band-heading { display: grid; grid-template-columns: minmax(0, .9fr) minmax(220px, .45fr); gap: 22px; align-items: end; margin-bottom: 22px; }
-    .band-heading h2 { margin-bottom: 0; font-size: 34px; line-height: 1.08; }
-    .band-heading p { margin-bottom: 0; color: var(--muted); }
-    .lesson-copy { white-space: pre-wrap; line-height: 1.72; }
-    .objective-list { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
-    .objective-list li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; min-height: 78px; border: 1px solid rgba(0, 109, 104, .16); border-radius: 8px; background: linear-gradient(135deg, rgba(215, 238, 231, .78), rgba(255, 253, 246, .9)); padding: 12px; }
-    .objective-list button { height: 30px; width: 30px; padding: 0; line-height: 1; border-radius: 999px; }
-    .objective-list button.is-complete { background: var(--teal); border-color: var(--teal); color: #fff; }
-    .media-showcase { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
-    .media-shell { overflow: hidden; margin: 0; border: 1px solid rgba(23, 32, 51, .16); border-radius: 8px; background: var(--night); color: #f8fafc; box-shadow: 0 18px 48px rgba(23, 32, 51, .18); }
-    .media-shell img, .media-shell video { display: block; width: 100%; max-height: 480px; object-fit: contain; background: #111827; }
-    .media-shell audio { width: 100%; padding: 16px; background: #fffdf6; }
-    figcaption { border-top: 1px solid rgba(255, 255, 255, .14); padding: 12px 14px; color: #e7edf8; font-size: 13px; line-height: 1.5; }
-    .explore-track { display: grid; gap: 14px; }
-    .explore-beat { display: grid; grid-template-columns: 56px 1fr; gap: 16px; align-items: start; border: 1px solid rgba(23, 32, 51, .15); border-left: 5px solid var(--iris); border-radius: 8px; background: linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(231, 238, 255, .72)); padding: 18px; }
-    .explore-beat:nth-child(2n) { border-left-color: var(--coral); background: linear-gradient(135deg, rgba(255, 247, 231, .94), rgba(255, 229, 233, .7)); }
-    .explore-beat:nth-child(3n) { border-left-color: var(--leaf); background: linear-gradient(135deg, rgba(246, 252, 232, .94), rgba(215, 238, 231, .74)); }
-    .beat-number { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: var(--night); color: #fff; font-weight: 860; }
-    .explore-beat h3 { margin-bottom: 8px; font-size: 20px; }
-    .concept-grid { display: grid; grid-template-columns: minmax(250px, .7fr) minmax(0, 1.3fr); gap: 20px; align-items: start; }
-    .vocab-panel, .example-panel, .next-challenge, .reflection-panel { border-radius: 8px; padding: 22px; }
-    .vocab-panel { border: 1px solid rgba(0, 109, 104, .18); background: linear-gradient(180deg, rgba(215, 238, 231, .92), rgba(255, 253, 246, .84)); }
-    .vocab-cloud { display: grid; gap: 12px; padding: 0; margin: 0; list-style: none; }
-    .vocab-cloud li { border: 1px solid rgba(0, 109, 104, .18); border-radius: 8px; background: rgba(255, 253, 246, .78); padding: 13px; }
-    .term { display: block; color: var(--teal); font-weight: 860; margin-bottom: 4px; }
-    .explain-timeline { display: grid; gap: 14px; }
-    .explain-step { display: grid; grid-template-columns: 92px 1fr; gap: 16px; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: rgba(255, 253, 246, .82); padding: 18px; }
-    .step-tag { color: var(--coral); font-weight: 860; }
-    .example-panel { display: grid; grid-template-columns: .75fr 1.25fr; gap: 22px; align-items: start; background: var(--night); color: #f8fafc; }
-    .example-panel .kicker { color: #f8c76a; }
-    .example-panel p { color: #dce6f5; }
-    .activity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; padding: 0; margin: 20px 0 0; list-style: none; }
-    .activity-card { display: grid; align-content: space-between; min-height: 220px; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .92), rgba(255, 244, 217, .76)); padding: 18px; }
-    .choice-row, .choices { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-    [data-classify-result], [data-quiz-feedback] { min-height: 24px; margin: 12px 0 0; color: #263244; font-weight: 760; }
-    .quiz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-    .quiz-card { display: grid; align-content: start; min-height: 250px; border: 1px solid rgba(23, 32, 51, .15); border-radius: 8px; background: linear-gradient(180deg, rgba(255, 253, 246, .94), rgba(235, 242, 255, .8)); padding: 20px; box-shadow: 0 16px 44px rgba(23, 32, 51, .12); }
-    .answer-line { display: none; }
-    .reflection-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(260px, .7fr); gap: 18px; }
-    .reflection-panel { border: 1px solid rgba(79, 99, 199, .18); background: linear-gradient(135deg, rgba(235, 238, 255, .9), rgba(255, 253, 246, .84)); }
-    .entity-band { padding-bottom: 52px; }
-    .entity-stage { position: relative; display: grid; gap: 16px; min-height: 460px; overflow: hidden; border: 1px solid rgba(23, 32, 51, .16); border-radius: 8px; background: linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(231, 238, 255, .82)); padding: 18px; box-shadow: 0 18px 50px rgba(23, 32, 51, .14); }
-    .entity-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(23, 32, 51, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 32, 51, .06) 1px, transparent 1px); background-size: 38px 38px; mask-image: linear-gradient(180deg, rgba(0, 0, 0, .74), transparent); }
-    .entity-breadcrumb { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 38px; }
-    .entity-breadcrumb button, .entity-breadcrumb span { min-height: 34px; border-radius: 999px; padding: 7px 11px; font-size: 12px; }
-    .entity-breadcrumb span { display: inline-flex; align-items: center; border: 1px solid rgba(23, 32, 51, .14); background: rgba(255, 253, 246, .74); font-weight: 760; }
-    .entity-map { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; align-content: start; min-height: 220px; }
-    .entity-node { display: grid; align-content: space-between; gap: 10px; min-height: 118px; text-align: left; border-width: 2px; background: linear-gradient(160deg, #ffffff, rgba(215, 238, 231, .76)); box-shadow: 0 12px 30px rgba(23, 32, 51, .12); }
-    .entity-node:hover, .entity-node:focus-visible { border-color: var(--iris); transform: translateY(-2px); }
-    .entity-node-label { color: var(--ink); font-size: 17px; font-weight: 860; line-height: 1.18; }
-    .entity-node-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; font-weight: 760; }
-    .entity-chip { border: 1px solid rgba(79, 99, 199, .18); border-radius: 999px; background: rgba(255, 253, 246, .78); padding: 4px 8px; }
-    .entity-details { position: relative; z-index: 1; display: grid; gap: 8px; border: 1px solid rgba(23, 32, 51, .14); border-radius: 8px; background: rgba(255, 253, 246, .78); padding: 16px; }
-    .entity-details h3 { margin: 0; font-size: 24px; line-height: 1.1; }
-    .entity-details p { margin: 0; color: #2d3b4f; }
-    .entity-tooltip { position: absolute; z-index: 4; width: min(300px, calc(100% - 32px)); pointer-events: none; opacity: 0; transform: translate(-50%, 4px); border: 1px solid rgba(23, 32, 51, .18); border-radius: 8px; background: rgba(23, 29, 43, .94); color: #f8fafc; padding: 12px; box-shadow: 0 18px 48px rgba(23, 32, 51, .28); transition: opacity .14s ease, transform .14s ease; }
-    .entity-tooltip.is-visible { opacity: 1; transform: translate(-50%, -2px); }
-    .entity-tooltip strong { display: block; margin-bottom: 4px; font-size: 14px; }
-    .entity-tooltip p { margin: 0; color: #dce6f5; font-size: 12px; line-height: 1.45; }
-    .next-challenge { background: var(--night); color: #f8fafc; }
-    .next-challenge ul { margin-bottom: 0; }
-    .next-challenge li { color: #dce6f5; }
-    @media (max-width: 860px) {
-      .lesson-hero, .band-heading, .concept-grid, .example-panel, .reflection-grid { grid-template-columns: 1fr; }
-      .lesson-hero { min-height: 0; padding: 40px 18px 30px; }
-      .hero-copy h1 { font-size: 44px; }
-      .stage { padding-left: 16px; padding-right: 16px; }
-      .entity-map { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    }
-    @media (max-width: 560px) {
-      .hero-copy h1 { font-size: 34px; }
-      .hero-summary { font-size: 16px; }
-      .explain-step, .explore-beat { grid-template-columns: 1fr; }
-      .entity-stage { min-height: 520px; padding: 14px; }
-      .entity-map { grid-template-columns: 1fr; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
-    }
-  </style>
+	  <style>
+	    :root { color-scheme: dark; --ink: #f8fbff; --muted: #b9c6dc; --dim: #7d8aa4; --line: rgba(174, 203, 255, .24); --line-strong: rgba(128, 190, 255, .58); --glass: rgba(12, 23, 48, .58); --glass-strong: rgba(17, 35, 70, .72); --deep: #030713; --accent: #67e8f9; --accent-2: #c084fc; --accent-3: #f8c76a; --good: #22c55e; --bad: #fb7185; }
+	    * { box-sizing: border-box; }
+	    html, body { min-height: 100%; overflow: hidden; }
+	    body { margin: 0; background: #030713; color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+	    body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .6; background-image: linear-gradient(rgba(103, 232, 249, .04) 1px, transparent 1px), linear-gradient(90deg, rgba(103, 232, 249, .04) 1px, transparent 1px), radial-gradient(circle at 12% 18%, rgba(255,255,255,.72) 0 1px, transparent 1.7px), radial-gradient(circle at 28% 72%, rgba(192,132,252,.52) 0 1px, transparent 1.6px), radial-gradient(circle at 72% 16%, rgba(103,232,249,.62) 0 1px, transparent 1.7px), radial-gradient(circle at 88% 68%, rgba(248,199,106,.48) 0 1px, transparent 1.6px); background-size: 64px 64px, 64px 64px, 280px 220px, 330px 260px, 360px 280px, 300px 240px; }
+	    h1, h2, h3, h4, p, figure { margin-top: 0; }
+	    h1, h2, h3, h4, .kicker { letter-spacing: 0; }
+	    p { line-height: 1.55; }
+	    button { min-height: 48px; border: 1px solid var(--line); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.045)); color: var(--ink); cursor: pointer; font: inherit; font-weight: 760; padding: 12px 14px; transition: transform .18s ease, border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease; }
+	    button:hover, button:focus-visible { border-color: var(--line-strong); box-shadow: 0 0 0 3px rgba(103, 232, 249, .12); transform: translateY(-1px); outline: none; }
+	    button.selected { border-color: var(--accent); background: rgba(103, 232, 249, .16); }
+	    button.correct, [data-quiz-choice].is-correct { border-color: rgba(34, 197, 94, .82); background: rgba(34, 197, 94, .18); color: #dcfce7; }
+	    button.wrong, [data-quiz-choice].is-wrong { border-color: rgba(251, 113, 133, .82); background: rgba(251, 113, 133, .16); color: #ffe4e6; }
+	    .lesson-page { position: relative; height: 100vh; min-height: 620px; overflow: hidden; background: linear-gradient(135deg, #030713 0%, #07152d 45%, #120d2c 100%); }
+	    .knowledge-canvas::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(120deg, rgba(103, 232, 249, .14), transparent 28%, rgba(192, 132, 252, .12) 72%, transparent); mix-blend-mode: screen; }
+	    .canvas-shell { position: relative; z-index: 1; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; height: 100%; padding: clamp(14px, 2.6vw, 34px); }
+	    .canvas-topbar { display: grid; grid-template-columns: minmax(260px, .82fr) minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+	    .canvas-brand { display: flex; gap: 14px; align-items: center; min-width: 0; }
+	    .brand-mark { position: relative; flex: 0 0 auto; width: 38px; height: 38px; border: 1px solid rgba(103, 232, 249, .72); border-radius: 8px; background: linear-gradient(135deg, rgba(103,232,249,.12), rgba(192,132,252,.18)); box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 0 28px rgba(103,232,249,.18); }
+	    .brand-mark::before, .brand-mark::after { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(248, 251, 255, .52); transform: rotate(30deg); }
+	    .brand-mark::after { transform: rotate(-30deg); opacity: .56; }
+	    .kicker { margin: 0 0 5px; color: var(--accent); font-size: 11px; text-transform: uppercase; font-weight: 860; }
+	    .canvas-title { margin: 0; overflow: hidden; text-overflow: ellipsis; color: #ffffff; font-size: clamp(28px, 4vw, 54px); line-height: .98; white-space: nowrap; }
+	    .canvas-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+	    .pill, .entity-chip { display: inline-flex; align-items: center; min-height: 28px; border: 1px solid rgba(174, 203, 255, .22); border-radius: 999px; background: rgba(255,255,255,.075); color: #dce9ff; padding: 5px 9px; font-size: 12px; font-weight: 760; }
+	    .entity-breadcrumb { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+	    .entity-breadcrumb button, .entity-breadcrumb span { min-height: 34px; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 999px; padding: 7px 12px; font-size: 12px; }
+	    .entity-breadcrumb span { border: 1px solid rgba(103, 232, 249, .38); background: rgba(103, 232, 249, .12); color: #eff6ff; font-weight: 860; }
+	    .canvas-reset { min-width: 104px; }
+	    .canvas-stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(292px, 380px); gap: 16px; min-height: 0; overflow: hidden; border: 1px solid rgba(174, 203, 255, .18); border-radius: 8px; background: linear-gradient(180deg, rgba(8, 17, 36, .66), rgba(4, 10, 24, .72)); box-shadow: 0 28px 90px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter: blur(18px); }
+	    .canvas-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .72; background-image: linear-gradient(rgba(174, 203, 255, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(174, 203, 255, .055) 1px, transparent 1px), repeating-linear-gradient(135deg, rgba(103,232,249,.055) 0 1px, transparent 1px 30px); background-size: 52px 52px, 52px 52px, 100% 100%; mask-image: linear-gradient(180deg, black, rgba(0,0,0,.7)); }
+	    .entity-map { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: minmax(88px, 1fr); gap: 14px; align-content: stretch; min-height: 0; overflow: auto; padding: 18px; transform-origin: center center; transition: transform .18s ease, opacity .22s ease; scrollbar-color: rgba(103,232,249,.35) transparent; }
+	    .is-zooming .entity-map { opacity: .76; transform: scale(.985); }
+	    .entity-node { position: relative; isolation: isolate; display: grid; grid-column: span 3; grid-row: span 2; align-content: end; gap: 10px; min-height: 142px; overflow: hidden; text-align: left; border-color: rgba(174, 203, 255, .24); background: linear-gradient(135deg, rgba(255,255,255,.14), rgba(255,255,255,.055)); box-shadow: 0 20px 62px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255,255,255,.13); backdrop-filter: blur(18px); }
+	    .entity-node::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(135deg, rgba(103,232,249,.18), transparent 42%, rgba(192,132,252,.18)); opacity: .72; }
+	    .entity-node::after { content: ""; position: absolute; inset: 1px; z-index: -1; border-radius: 7px; border: 1px solid rgba(255,255,255,.1); pointer-events: none; }
+	    .entity-node:hover, .entity-node:focus-visible { border-color: rgba(103, 232, 249, .88); box-shadow: 0 26px 76px rgba(0,0,0,.4), 0 0 0 3px rgba(103, 232, 249, .12); transform: translateY(-3px) scale(1.01); }
+	    .entity-node.is-selected { border-color: rgba(248, 199, 106, .72); }
+	    .entity-node[data-card-size="feature"] { grid-column: span 5; grid-row: span 3; }
+	    .entity-node[data-card-size="wide"] { grid-column: span 5; }
+	    .entity-node[data-card-size="media"] { grid-column: span 4; grid-row: span 3; }
+	    .entity-node[data-card-size="compact"] { grid-column: span 3; grid-row: span 2; }
+	    .entity-node-media { position: absolute; inset: 0; z-index: -2; opacity: .56; }
+	    .entity-node-media img, .entity-node-media video { width: 100%; height: 100%; object-fit: cover; filter: saturate(1.08) contrast(1.04); }
+	    .entity-node-media audio { display: none; }
+	    .entity-node-label { position: relative; color: #ffffff; font-size: clamp(17px, 1.35vw, 23px); font-weight: 880; line-height: 1.12; text-wrap: balance; }
+	    .entity-node-summary { position: relative; display: -webkit-box; overflow: hidden; color: #d9e6fb; font-size: 13px; line-height: 1.42; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+	    .entity-node-meta { position: relative; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; font-weight: 760; }
+	    .entity-details { position: relative; z-index: 1; display: grid; align-content: start; gap: 13px; min-height: 0; overflow: auto; border-left: 1px solid rgba(174, 203, 255, .14); background: linear-gradient(180deg, rgba(8, 17, 36, .66), rgba(5, 12, 28, .52)); padding: 22px; backdrop-filter: blur(20px); }
+	    .entity-details h3 { margin: 0; color: #ffffff; font-size: clamp(25px, 2.7vw, 40px); line-height: 1.05; text-wrap: balance; }
+	    .entity-details h4 { margin: 0; color: #f8fbff; font-size: 18px; line-height: 1.28; }
+	    .entity-details p { margin: 0; color: #d8e4f6; }
+	    .detail-media { overflow: hidden; margin: 2px 0 0; border: 1px solid rgba(174,203,255,.18); border-radius: 8px; background: rgba(0,0,0,.22); }
+	    .detail-media img, .detail-media video { display: block; width: 100%; max-height: 270px; object-fit: contain; }
+	    .detail-media audio { width: 100%; padding: 10px; }
+	    .detail-action { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; border: 1px solid rgba(174,203,255,.16); border-radius: 8px; background: rgba(255,255,255,.06); padding: 12px; }
+	    .detail-action button { min-width: 78px; }
+	    .detail-action button.is-complete { border-color: rgba(34,197,94,.72); background: rgba(34,197,94,.16); color: #dcfce7; }
+	    .quiz-card, .activity-card { display: grid; gap: 12px; min-height: 250px; border: 1px solid rgba(174,203,255,.18); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.045)); padding: 16px; box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+	    .choice-row, .choices { display: flex; flex-wrap: wrap; gap: 10px; }
+	    [data-quiz-choice], [data-classify-choice] { flex: 1 1 150px; min-height: 58px; text-align: left; }
+	    [data-classify-result], [data-quiz-feedback] { min-height: 24px; color: #e8f1ff; font-weight: 760; }
+	    .answer-line { display: none; }
+	    .lesson-copy { color: #d8e4f6; }
+	    .entity-tooltip { position: absolute; z-index: 4; width: min(320px, calc(100% - 32px)); pointer-events: none; opacity: 0; transform: translate(-50%, 4px); border: 1px solid rgba(174, 203, 255, .28); border-radius: 8px; background: rgba(4, 10, 24, .92); color: #f8fafc; padding: 12px; box-shadow: 0 18px 48px rgba(0, 0, 0, .42); backdrop-filter: blur(18px); transition: opacity .14s ease, transform .14s ease; }
+	    .entity-tooltip.is-visible { opacity: 1; transform: translate(-50%, -2px); }
+	    .entity-tooltip strong { display: block; margin-bottom: 4px; font-size: 14px; }
+	    .entity-tooltip p { margin: 0; color: #dce6f5; font-size: 12px; line-height: 1.45; }
+	    @media (max-width: 980px) {
+	      html, body { overflow: auto; }
+	      .lesson-page { height: auto; min-height: 100vh; overflow: visible; }
+	      .canvas-shell { min-height: 100vh; height: auto; }
+	      .canvas-topbar { grid-template-columns: 1fr auto; }
+	      .entity-breadcrumb { grid-column: 1 / -1; justify-content: flex-start; order: 3; }
+	      .canvas-stage { grid-template-columns: 1fr; overflow: visible; }
+	      .entity-map { max-height: none; overflow: visible; }
+	      .entity-details { border-left: 0; border-top: 1px solid rgba(174,203,255,.14); }
+	    }
+	    @media (max-width: 700px) {
+	      .canvas-title { white-space: normal; font-size: 31px; }
+	      .canvas-topbar { grid-template-columns: 1fr; }
+	      .canvas-reset { justify-self: start; }
+	      .entity-map { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(112px, auto); padding: 12px; }
+	      .entity-node, .entity-node[data-card-size] { grid-column: span 4; grid-row: span 2; }
+	    }
+	    @media (prefers-reduced-motion: reduce) {
+	      *, *::before, *::after { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
+	    }
+	  </style>
   ${safeThemeCss ? `<style id="${THEME_STYLE_ID}">${styleForHtml(safeThemeCss)}</style>` : ""}
 </head>
-<body>
-  <main class="lesson-page" data-runtime="static-lesson">
-    <header class="lesson-hero">
-      <div class="hero-copy">
-        <p class="kicker">Student mission</p>
-        <h1>${escapeHtml(spec.title)}</h1>
-        <p class="hero-summary">${escapeHtml(plan.hookBody)}</p>
-        <div class="lesson-meta">
-          <span class="pill">${escapeHtml(plan.gradeBand)}</span>
-          <span class="pill">${escapeHtml(String(plan.durationMinutes))} minutes</span>
-          <span class="pill">${escapeHtml(plan.quiz.title)}</span>
-        </div>
-      </div>
-      <aside class="hero-panel" aria-labelledby="objectives-title">
-        <p class="kicker">Your goals</p>
-        <h2 id="objectives-title">What you will explore</h2>
-        <ul class="objective-list">${plan.objectives.map((item) => `<li><button type="button" aria-pressed="false" data-objective-toggle>✓</button><span>${escapeHtml(item)}</span></li>`).join("")}</ul>
-      </aside>
-    </header>
-    <div class="stage">
-      ${
-        mediaItems.length
-          ? `<section class="lesson-band">
-        <div class="band-heading">
-          <div>
-            <p class="kicker">Look closely</p>
-            <h2>Start with the visual</h2>
-          </div>
-          <p>Notice details, patterns, and changes you can use as evidence later.</p>
-        </div>
-        <div class="media-showcase">
-          ${mediaItems
-            .map((item) => {
-              if (item.modality === "image") {
-                return `<figure class="media-shell"><img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.alt)}" loading="lazy" /><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
-              }
-              if (item.modality === "video") {
-                return `<figure class="media-shell"><video src="${escapeHtml(item.url)}" controls playsinline preload="metadata"><track kind="captions" /></video><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
-              }
-              return `<figure class="media-shell"><audio src="${escapeHtml(item.url)}" controls preload="none"><track kind="captions" /></audio><figcaption>${escapeHtml(item.title ?? item.alt)}</figcaption></figure>`;
-            })
-            .join("")}
-        </div>
-      </section>`
-          : ""
-      }
-      <section class="lesson-band">
-        <div class="band-heading">
-          <div>
-            <p class="kicker">Explore path</p>
-            <h2>Follow the trail</h2>
-          </div>
-          <p>Use each stop to observe, compare, try an idea, and explain your reasoning.</p>
-        </div>
-        <div class="explore-track">
-          ${plan.lectureScript
-            .map(
-              (item, index) => `<article class="explore-beat">
-            <span class="beat-number">${index + 1}</span>
-            <div>
-              <p class="kicker">${escapeHtml(item.segment)}</p>
-              <h3>${escapeHtml(item.title)}</h3>
-              <p>${escapeHtml(item.studentAction)}</p>
-            </div>
-          </article>`
-            )
-            .join("")}
-        </div>
-      </section>
-      <section class="lesson-band">
-        <div class="band-heading">
-          <div>
-            <p class="kicker">Core ideas</p>
-            <h2>Words and ideas to unlock</h2>
-          </div>
-          <p>Connect each term to what you can observe, test, or explain.</p>
-        </div>
-        <div class="concept-grid">
-          <aside class="vocab-panel">
-            <h3>Key vocabulary</h3>
-            <ul class="vocab-cloud">${plan.keyVocabulary.map((item) => `<li><span class="term">${escapeHtml(item.term)}</span>${escapeHtml(item.definition)}</li>`).join("")}</ul>
-          </aside>
-          <div class="explain-timeline">
-            ${plan.explanationSections.map((section, index) => `<article class="explain-step"><span class="step-tag">Step ${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><div class="lesson-copy">${escapeHtml(section.body)}</div></div></article>`).join("")}
-          </div>
-        </div>
-      </section>
-      <section class="lesson-band entity-band" data-entity-presenter>
-        <div class="band-heading">
-          <div>
-            <p class="kicker">Pioneer / GLiNER2 schema</p>
-            <h2>Entity presentation map</h2>
-          </div>
-          <p>A nested view of the concepts, terms, processes, objects, and relationships extracted for this lesson.</p>
-        </div>
-        <div class="entity-stage" data-entity-space tabindex="0" aria-label="Nested Pioneer and GLiNER2 entity presentation">
-          <div class="entity-breadcrumb" data-entity-breadcrumb></div>
-          <div class="entity-map" data-entity-map></div>
-          <div class="entity-details" data-entity-details></div>
-          <div class="entity-tooltip" data-entity-tooltip role="status"></div>
-        </div>
-      </section>
-      <section class="lesson-band">
-        <div class="example-panel">
-          <div>
-            <p class="kicker">Try one together</p>
-            <h2>${escapeHtml(plan.workedExample.title)}</h2>
-          </div>
-          <div class="lesson-copy">${escapeHtml(plan.workedExample.body)}</div>
-        </div>
-      </section>
-      <section class="lesson-band">
-        <div class="band-heading">
-          <div>
-            <p class="kicker">Practice lab</p>
-            <h2>${escapeHtml(plan.activity.title)}</h2>
-          </div>
-          <p>${escapeHtml(plan.activity.instruction)}</p>
-        </div>
-        <ul class="activity-grid">
-          ${[
-            ...plan.activity.strongItems.map((item, index) => ({
-              id: `strong-${index + 1}`,
-              label: item,
-              answer: "strong",
-            })),
-            ...plan.activity.weakItems.map((item, index) => ({
-              id: `weak-${index + 1}`,
-              label: item,
-              answer: "weak",
-            })),
-          ]
-            .map(
-              (
-                item
-              ) => `<li class="activity-card" data-classify-card data-answer="${item.answer}">
-                <span class="term">${escapeHtml(item.label)}</span>
-                <div class="choice-row">
-                  <button type="button" data-classify-choice="${item.id}:strong">${escapeHtml(plan.activity.strongFitLabel)}</button>
-                  <button type="button" data-classify-choice="${item.id}:weak">${escapeHtml(plan.activity.weakFitLabel)}</button>
-                </div>
-                <p data-classify-result></p>
-              </li>`
-            )
-            .join("")}
-        </ul>
-      </section>
-      <section class="lesson-band">
-        <div class="band-heading">
-          <div>
-            <p class="kicker">Quick check</p>
-            <h2>${escapeHtml(plan.quiz.title)}</h2>
-          </div>
-          <p>Choose an answer, read the feedback, and revise your reasoning.</p>
-        </div>
-        <div class="quiz-grid">
-          ${plan.quiz.items
-            .map(
-              (item, index) => `<article class="quiz-card">
-            <p class="kicker">Question ${index + 1}</p>
-            <h3>${escapeHtml(item.stem)}</h3>
-            <div class="choices">${item.choices.map((choice) => `<button type="button" data-quiz-choice>${escapeHtml(choice)}</button>`).join("")}</div>
-            <p data-quiz-feedback></p>
-            <p class="answer-line"><strong>Answer:</strong> <span data-quiz-answer>${escapeHtml(item.answer)}</span></p>
-            <p>${escapeHtml(item.explanation)}</p>
-          </article>`
-            )
-            .join("")}
-        </div>
-      </section>
-      <section class="lesson-band">
-        <div class="reflection-grid">
-          <div class="reflection-panel">
-            <p class="kicker">Exit ticket</p>
-            <h2>Reflect</h2>
-            <p>${escapeHtml(plan.reflectionPrompt)}</p>
-          </div>
-          <aside class="next-challenge">
-            <p class="kicker">Keep exploring</p>
-            <h2>Next challenge</h2>
-            <ul>${plan.explanationSections.map((section) => `<li>Find or sketch one example of ${escapeHtml(section.title.toLowerCase())}.</li>`).join("")}</ul>
-          </aside>
-        </div>
-      </section>
-    </div>
-  </main>
+	<body>
+	  <main class="lesson-page knowledge-canvas" data-runtime="static-lesson">
+	    <section class="canvas-shell" data-entity-presenter>
+	      <header class="canvas-topbar">
+	        <div class="canvas-brand">
+	          <span class="brand-mark" aria-hidden="true"></span>
+	          <div>
+	            <p class="kicker">Lumen sandbox</p>
+	            <h1 class="canvas-title">${escapeHtml(spec.title)}</h1>
+	            <div class="canvas-meta">
+	              <span class="pill">${escapeHtml(plan.gradeBand)}</span>
+	              <span class="pill">${escapeHtml(String(plan.durationMinutes))} minutes</span>
+	              <span class="pill">${escapeHtml(plan.quiz.title)}</span>
+	            </div>
+	          </div>
+	        </div>
+	        <nav class="entity-breadcrumb" data-entity-breadcrumb aria-label="Canvas path"></nav>
+	        <button class="canvas-reset" type="button" data-canvas-reset>Overview</button>
+	      </header>
+	      <div class="canvas-stage" data-entity-space tabindex="0" aria-label="Zoomable lesson knowledge canvas">
+	        <div class="entity-map" data-entity-map></div>
+	        <aside class="entity-details" data-entity-details></aside>
+	        <div class="entity-tooltip" data-entity-tooltip role="status"></div>
+	      </div>
+	    </section>
+	  </main>
   <script type="application/json" id="lesson-data">${jsonForHtml(runtimeData)}</script>
   <script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(createStaticLessonTemplateRuntimeScript(runtimeScript))}</script>
 </body>
@@ -1259,6 +1393,47 @@ export function validateSandboxedLessonHtml(html: string) {
   }
 }
 
+export function updateSandboxedLessonCode(input: {
+  html: string;
+  themeCss?: string;
+  runtimeScript?: string;
+}) {
+  let html = input.html;
+  const themeCss = input.themeCss?.trim();
+  if (themeCss) {
+    validateSandboxedLessonThemeCss(themeCss);
+    html = replaceOrInsertBeforeCloseTag({
+      html,
+      pattern: new RegExp(
+        `<style\\b(?=[^>]*\\bid=["']${THEME_STYLE_ID}["'])[^>]*>[\\s\\S]*?<\\/style>`,
+        "i"
+      ),
+      replacement: `<style id="${THEME_STYLE_ID}">${styleForHtml(themeCss)}</style>`,
+      closeTag: "</head>",
+    });
+  }
+
+  const runtimeScript = input.runtimeScript?.trim();
+  if (runtimeScript) {
+    const isStaticLesson = /data-runtime=["']static-lesson["']/.test(html);
+    const nextRuntime = isStaticLesson
+      ? createStaticLessonTemplateRuntimeScript(runtimeScript)
+      : runtimeScript;
+    html = replaceOrInsertBeforeCloseTag({
+      html,
+      pattern: new RegExp(
+        `<script\\b(?=[^>]*\\bid=["']${EMBEDDED_RUNTIME_SCRIPT_ID}["'])(?=[^>]*\\btype=["']module["'])[^>]*>[\\s\\S]*?<\\/script>`,
+        "i"
+      ),
+      replacement: `<script type="module" id="${EMBEDDED_RUNTIME_SCRIPT_ID}">${scriptForHtml(nextRuntime)}</script>`,
+      closeTag: "</body>",
+    });
+  }
+
+  validateSandboxedLessonHtml(html);
+  return html;
+}
+
 export type SandboxDemoReview = {
   passed: boolean;
   detail: string;
@@ -1279,13 +1454,22 @@ export function reviewSandboxedLessonArtifact(
     /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|oklch\(|linear-gradient|radial-gradient/gi
   );
   const hasGeneratedTheme = isSolar || html.includes(`id="${THEME_STYLE_ID}"`);
+  const hasCanvasShell =
+    isSolar ||
+    (/class="[^"]*knowledge-canvas/.test(html) &&
+      /\bdata-entity-space\b/.test(html) &&
+      /\bdata-entity-map\b/.test(html));
   const hasInteractiveControls =
     isSolar ||
-    /\bdata-(quiz-choice|classify-choice|objective-toggle)\b/.test(html);
+    /\bdata-(entity-node|quiz-choice|classify-choice|objective-toggle)\b/.test(
+      html
+    );
   const hasLargeTouchAreas =
     isSolar ||
     (/min-height:\s*(?:5[2-9]|[6-9]\d|[1-9]\d{2,})px/i.test(html) &&
-      /\bdata-(quiz-choice|classify-choice)\b/.test(html));
+      /\b(data-entity-node|data-quiz-choice|data-classify-choice)\b/.test(
+        html
+      ));
   const hasPlayfulVisuals =
     isSolar ||
     (colorCount >= 14 &&
@@ -1293,6 +1477,7 @@ export function reviewSandboxedLessonArtifact(
 
   const checks = [
     { label: "sandbox runtime marker", passed: /data-runtime=/.test(html) },
+    { label: "zoomable canvas shell", passed: hasCanvasShell },
     { label: "topic-specific theme", passed: hasGeneratedTheme },
     { label: "large interactive areas", passed: hasLargeTouchAreas },
     { label: "student interaction hooks", passed: hasInteractiveControls },

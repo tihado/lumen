@@ -4,6 +4,7 @@ import {
   createSandboxedLessonArtifact,
   reviewSandboxedLessonArtifact,
   sandboxedLessonSpecSchema,
+  updateSandboxedLessonCode,
   validateSandboxedLessonHtml,
   validateSandboxedLessonThemeCss,
 } from "./html-artifact";
@@ -243,13 +244,16 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.spec.kind).toBe("static-lesson");
     expect(() => sandboxedLessonSpecSchema.parse(artifact.spec)).not.toThrow();
     expect(artifact.html).toContain('data-runtime="static-lesson"');
+    expect(artifact.html).toContain("knowledge-canvas");
+    expect(artifact.html).toContain("Zoomable lesson knowledge canvas");
     expect(artifact.html).toContain('id="lesson-data"');
     expect(artifact.html).toContain('id="lesson-runtime-script"');
     expect(artifact.html).toContain("pioneer-gliner2");
-    expect(artifact.html).toContain("Entity presentation map");
     expect(artifact.html).toContain("data-entity-presenter");
     expect(artifact.html).toContain("data-entity-space");
+    expect(artifact.html).toContain("data-entity-map");
     expect(artifact.html).toContain("data-entity-node");
+    expect(artifact.html).toContain("data-card-size");
     expect(artifact.html).toContain("mouseenter");
     expect(artifact.html).toContain("contextmenu");
     expect(artifact.html).toContain('"children"');
@@ -259,7 +263,15 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).toContain("photosynthesis.png");
     expect(artifact.html).toContain("photosynthesis.mp4");
     expect(artifact.html).toContain("Ready");
-    expect(artifact.html).toContain("Follow the trail");
+    const runtimeScript = artifact.html.match(
+      /<script type="module" id="lesson-runtime-script">([\s\S]*?)<\/script>/
+    )?.[1];
+    if (!runtimeScript) {
+      throw new Error("Expected embedded runtime script.");
+    }
+    expect(() => new Function(runtimeScript)).not.toThrow();
+    expect(artifact.html).toContain("Explore path");
+    expect(artifact.html).not.toContain("Follow the trail");
     expect(artifact.html).toContain('"student"');
     expect(artifact.html).not.toContain("Teacher says");
     expect(artifact.html).not.toContain("Teacher notes");
@@ -323,6 +335,31 @@ describe("sandboxed lesson HTML", () => {
     expect(artifact.html).toContain('id="lesson-theme-style"');
     expect(artifact.html).toContain("min-height: 72px");
     expect(reviewSandboxedLessonArtifact(artifact).passed).toBe(true);
+  });
+
+  it("updates the generated CSS and JavaScript for saved static lessons", () => {
+    const artifact = createSandboxedLessonArtifact({
+      prompt: "I want to learn about photosynthesis",
+      plan: { ...plan, title: "Photosynthesis" },
+      themeCss:
+        ".lesson-page { background: linear-gradient(135deg, #f0fdf4, #e0f2fe); }",
+      runtimeScript:
+        "document.querySelector('[data-quiz-feedback]').textContent = 'Ready';",
+    });
+
+    const html = updateSandboxedLessonCode({
+      html: artifact.html,
+      themeCss:
+        ".lesson-page { background: linear-gradient(135deg, #020617, #155e75); }",
+      runtimeScript:
+        "document.querySelector('[data-entity-details]').setAttribute('data-revised', 'true');",
+    });
+
+    expect(html).toContain("#155e75");
+    expect(html).not.toContain("#f0fdf4");
+    expect(html).toContain("data-revised");
+    expect(html).toContain("function renderEntityView");
+    expect(() => validateSandboxedLessonHtml(html)).not.toThrow();
   });
 
   it("rejects unsupported scripts and inline handlers", () => {

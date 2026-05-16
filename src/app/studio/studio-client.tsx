@@ -3,7 +3,9 @@
 import {
   BookOpenCheck,
   Bot,
+  Code2,
   ExternalLink,
+  FileText,
   Home,
   LibraryBig,
   Loader2,
@@ -17,7 +19,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CanvasWorkspace } from "@/components/canvas/CanvasWorkspace";
 import { SourcesDrawer } from "@/components/canvas/SourcesDrawer";
@@ -70,7 +71,6 @@ export function StudioClient({
   databaseAvailability: DatabaseAvailability;
   initialLessonId?: string;
 }) {
-  const router = useRouter();
   const [transcript, setTranscript] = useState(
     "I want to learn about the solar system"
   );
@@ -85,6 +85,9 @@ export function StudioClient({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaRetryingId, setMediaRetryingId] = useState<string | null>(null);
   const [savedLessonId, setSavedLessonId] = useState<string | null>(null);
+  const [allowSandboxCodeUpdate, setAllowSandboxCodeUpdate] = useState(false);
+  const [includeTeachingGuideContext, setIncludeTeachingGuideContext] =
+    useState(false);
   const [voiceAgentBusy, setVoiceAgentBusy] = useState(false);
   const [voiceAgentError, setVoiceAgentError] = useState<string | null>(null);
   const [voiceAgentSession, setVoiceAgentSession] =
@@ -334,25 +337,48 @@ export function StudioClient({
         const res = await fetch("/api/canvas/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lesson, instruction }),
+          body: JSON.stringify({
+            lesson,
+            instruction,
+            lessonId: savedLessonId ?? lesson.id,
+            updateSandboxCode: allowSandboxCodeUpdate,
+            includeTeachingGuideContext,
+          }),
         });
         const payload = (await res.json().catch(() => null)) as {
           lesson?: LessonDocument;
           reply?: string;
+          lessonId?: string;
+          sandboxUpdated?: boolean;
+          sandboxReply?: string;
+          sandboxProblem?: string;
+          sandboxTimelineRow?: StudioTimelineRow;
           error?: string;
         } | null;
         if (!(res.ok && payload?.lesson)) {
           throw new Error(payload?.error ?? `HTTP ${res.status}`);
         }
         setLesson(payload.lesson);
-        setSavedLessonId(null);
+        setSavedLessonId(
+          allowSandboxCodeUpdate && payload.sandboxUpdated
+            ? (payload.lessonId ?? payload.lesson.id)
+            : null
+        );
+        if (payload.sandboxTimelineRow) {
+          pushTimeline(payload.sandboxTimelineRow);
+        }
         setSelectedId(null);
+        const sandboxNote = allowSandboxCodeUpdate
+          ? payload.sandboxUpdated
+            ? ` Sandbox HTML updated${payload.sandboxReply ? `: ${payload.sandboxReply}` : "."}`
+            : ` Sandbox HTML was not updated${payload.sandboxProblem ? `: ${payload.sandboxProblem}` : "."}`
+          : "";
         setChatMessages((prev) => [
           ...prev,
           {
             id: `assistant-${Date.now()}`,
             role: "assistant",
-            content: payload.reply ?? "I updated the canvas plan.",
+            content: `${payload.reply ?? "I updated the canvas plan."}${sandboxNote}`,
           },
         ]);
       } catch (e) {
@@ -371,7 +397,13 @@ export function StudioClient({
         setActiveChatMode(null);
       }
     },
-    [lesson]
+    [
+      allowSandboxCodeUpdate,
+      includeTeachingGuideContext,
+      lesson,
+      pushTimeline,
+      savedLessonId,
+    ]
   );
 
   const submitIdeaSpark = useCallback(async () => {
@@ -500,12 +532,16 @@ export function StudioClient({
     [lesson]
   );
 
-  const openSavedLesson = useCallback(() => {
+  const openSandboxHtml = useCallback(() => {
     if (!savedLessonId) {
       return;
     }
-    router.push(`/lesson/${savedLessonId}`);
-  }, [router, savedLessonId]);
+    const url = `/api/lessons/${encodeURIComponent(savedLessonId)}/sandbox`;
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.assign(url);
+    }
+  }, [savedLessonId]);
 
   const hasStartedConversation =
     chatMessages.some((message) => message.role === "user") || Boolean(lesson);
@@ -516,6 +552,7 @@ export function StudioClient({
     activeChatMode === "revise"
       ? "Adding sugar & spice..."
       : "Building the lesson...";
+  const chatToggleDisabled = busy || !lesson;
 
   const startVoiceAgentSession = useCallback(async () => {
     setVoiceAgentBusy(true);
@@ -679,6 +716,52 @@ export function StudioClient({
                   )}
                 </div>
               </ScrollArea>
+              <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/70 bg-white/60 p-1">
+                <label
+                  className={cn(
+                    "flex min-w-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-primary/15 bg-white/70 px-1.5 py-1 font-medium text-[10px] text-muted-foreground transition-colors",
+                    allowSandboxCodeUpdate &&
+                      "border-primary/35 bg-primary/10 text-foreground",
+                    chatToggleDisabled && "cursor-not-allowed opacity-55"
+                  )}
+                  title="Let the code model revise the saved sandbox HTML code for this message."
+                >
+                  <input
+                    checked={allowSandboxCodeUpdate}
+                    className="peer sr-only"
+                    disabled={chatToggleDisabled}
+                    onChange={(event) =>
+                      setAllowSandboxCodeUpdate(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  <span className="relative h-3.5 w-6 shrink-0 rounded-full bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-2.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-2.5" />
+                  <Code2 className="size-3 shrink-0" />
+                  <span className="truncate">Sandbox code</span>
+                </label>
+                <label
+                  className={cn(
+                    "flex min-w-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-primary/15 bg-white/70 px-1.5 py-1 font-medium text-[10px] text-muted-foreground transition-colors",
+                    includeTeachingGuideContext &&
+                      "border-primary/35 bg-primary/10 text-foreground",
+                    chatToggleDisabled && "cursor-not-allowed opacity-55"
+                  )}
+                  title="Attach the current teaching guide as model context for this message."
+                >
+                  <input
+                    checked={includeTeachingGuideContext}
+                    className="peer sr-only"
+                    disabled={chatToggleDisabled}
+                    onChange={(event) =>
+                      setIncludeTeachingGuideContext(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  <span className="relative h-3.5 w-6 shrink-0 rounded-full bg-muted transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-2.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-2.5" />
+                  <FileText className="size-3 shrink-0" />
+                  <span className="truncate">Guide context</span>
+                </label>
+              </div>
               <VoiceSessionController
                 disabled={busy}
                 onTranscriptChange={setTranscript}
@@ -784,12 +867,12 @@ export function StudioClient({
             <Separator className="hidden h-6 lg:block" orientation="vertical" />
             <Button
               disabled={!savedLessonId}
-              onClick={openSavedLesson}
+              onClick={openSandboxHtml}
               type="button"
               variant="secondary"
             >
               <ExternalLink className="size-4" />
-              Open saved lesson
+              Open sandbox HTML
             </Button>
           </div>
           {lesson ? (

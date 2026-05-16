@@ -214,12 +214,33 @@ const canvasRevisionSchema = z.object({
     .describe("Complete replacement nodes. Preserve existing IDs."),
 });
 
+const sandboxCodeRevisionSchema = z.object({
+  reply: z.string().min(1).max(360),
+  themeCss: z
+    .string()
+    .max(30_000)
+    .describe("CSS overrides for the existing sandbox page."),
+  runtimeScript: z
+    .string()
+    .max(40_000)
+    .describe("Safe vanilla browser JavaScript enhancement code."),
+});
+
 export type CanvasRevisionResult = {
   lesson: LessonDocument;
   reply: string;
   patches: LessonPatchOp[];
   model: string;
   usedFallback: boolean;
+};
+
+export type SandboxCodeRevisionResult = {
+  reply: string;
+  themeCss: string;
+  runtimeScript: string;
+  model: string;
+  usedFallback: boolean;
+  problem?: string;
 };
 
 export function fallbackLessonPlan(input: {
@@ -496,6 +517,7 @@ function stripCodeFence(value: string) {
 
 function isUnsafeBrowserRuntimeScript(code: string) {
   return (
+    /<script\b/i.test(code) ||
     /<\/script\b/i.test(code) ||
     /\beval\s*\(/i.test(code) ||
     /\bFunction\s*\(/.test(code) ||
@@ -654,6 +676,7 @@ export async function reviseCanvasLesson(input: {
   lesson: LessonDocument;
   instruction: string;
   env: AppEnv;
+  teachingGuideContext?: string;
 }): Promise<CanvasRevisionResult> {
   const lesson = lessonDocumentSchema.parse(input.lesson);
   const model = input.env.OPENAI_MODEL ?? DEFAULT_LESSON_MODEL;
@@ -679,6 +702,9 @@ export async function reviseCanvasLesson(input: {
         "Do not invent citations or external URLs. Keep media nodes unchanged unless the user specifically asks to alter alt text.",
         `User message:\n${input.instruction}`,
         `Current lesson summary:\n${JSON.stringify(summarizeLessonForRevision(lesson))}`,
+        ...(input.teachingGuideContext
+          ? [`Current teaching guide context:\n${input.teachingGuideContext}`]
+          : []),
       ].join("\n\n---\n\n"),
     });
     const patches: LessonPatchOp[] = [];
@@ -782,37 +808,34 @@ export function fallbackLessonThemeCss(
   --demo-panel: ${palette.panel};
 }
 .lesson-page {
-  color: var(--demo-ink);
+  color: #f8fbff;
   background:
-    radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--demo-accent) 20%, transparent), transparent 24rem),
-    radial-gradient(circle at 84% 10%, color-mix(in srgb, var(--demo-accent-2) 28%, transparent), transparent 22rem),
-    linear-gradient(135deg, var(--demo-page), #ffffff 72%);
+    linear-gradient(125deg, color-mix(in srgb, var(--demo-accent) 18%, #030713), #07152d 48%, color-mix(in srgb, var(--demo-accent-2) 18%, #120d2c));
 }
-.lesson-hero::before,
-.hero-panel,
+.canvas-stage,
+.entity-node,
+.entity-details,
 .quiz-card,
-.activity-card,
-.explore-beat,
-.explain-step,
-.vocab-panel,
-.reflection-panel {
-  border-color: color-mix(in srgb, var(--demo-accent) 24%, transparent);
-  box-shadow: 0 20px 58px rgba(31, 41, 55, .14);
+.activity-card {
+  border-color: color-mix(in srgb, var(--demo-accent) 34%, transparent);
+  box-shadow: 0 24px 76px rgba(0, 0, 0, .34);
 }
-.lesson-hero::before {
+.canvas-stage {
   background:
-    linear-gradient(132deg, rgba(255,255,255,.78), rgba(255,255,255,.36)),
-    repeating-linear-gradient(135deg, color-mix(in srgb, var(--demo-accent) 14%, transparent) 0 3px, transparent 3px 22px);
+    linear-gradient(180deg, rgba(8,17,36,.7), rgba(5,12,28,.76)),
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--demo-accent) 10%, transparent) 0 1px, transparent 1px 32px);
 }
 .kicker,
-.term,
-.step-tag {
+.canvas-brand .kicker {
   color: var(--demo-accent);
 }
-.beat-number,
-.next-challenge,
-.example-panel {
-  background: linear-gradient(135deg, var(--demo-ink), color-mix(in srgb, var(--demo-accent) 38%, #111827));
+.entity-node {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--demo-accent) 20%, rgba(255,255,255,.1)), rgba(255,255,255,.05)),
+    linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+}
+.entity-node::before {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--demo-accent) 24%, transparent), transparent 48%, color-mix(in srgb, var(--demo-accent-2) 24%, transparent));
 }
 [data-quiz-choice],
 [data-classify-choice],
@@ -820,23 +843,144 @@ export function fallbackLessonThemeCss(
   min-height: 58px;
   border-width: 2px;
   border-color: color-mix(in srgb, var(--demo-accent) 26%, transparent);
-  background: linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--demo-panel) 88%, var(--demo-accent-2)));
+  background: linear-gradient(180deg, rgba(255,255,255,.13), color-mix(in srgb, var(--demo-accent-2) 22%, rgba(255,255,255,.04)));
 }
 .quiz-card,
 .activity-card {
   min-height: 250px;
   background:
-    radial-gradient(circle at 12% 14%, color-mix(in srgb, var(--demo-accent-2) 20%, transparent), transparent 9rem),
-    linear-gradient(180deg, var(--demo-panel), #ffffff);
+    linear-gradient(135deg, color-mix(in srgb, var(--demo-accent-2) 14%, rgba(255,255,255,.08)), rgba(255,255,255,.04));
+}
+.entity-node[data-card-size="feature"],
+.entity-node[data-card-size="media"] {
+  min-height: 250px;
 }
 .quiz-card:hover,
 .activity-card:hover,
+.entity-node:hover,
 [data-quiz-choice]:hover,
 [data-classify-choice]:hover {
   transform: translateY(-2px);
   border-color: var(--demo-accent);
 }
 `.trim();
+}
+
+function extractLessonDataScript(html: string) {
+  return (
+    html.match(
+      /<script\b(?=[^>]*\bid=["']lesson-data["'])(?=[^>]*\btype=["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/i
+    )?.[1] ?? ""
+  ).slice(0, 14_000);
+}
+
+function extractThemeCss(html: string) {
+  return (
+    html.match(
+      /<style\b(?=[^>]*\bid=["']lesson-theme-style["'])[^>]*>([\s\S]*?)<\/style>/i
+    )?.[1] ?? ""
+  ).slice(0, 8000);
+}
+
+function compactHtmlForPrompt(html: string) {
+  return html.replace(/\s+/g, " ").slice(0, 10_000);
+}
+
+export async function reviseSandboxLessonCode(input: {
+  html: string;
+  instruction: string;
+  teachingGuideContext?: string;
+  env: AppEnv;
+}): Promise<SandboxCodeRevisionResult> {
+  const model = input.env.OPENAI_CODE_MODEL ?? DEFAULT_CODE_MODEL;
+  if (!input.env.OPENAI_API_KEY) {
+    return {
+      reply: "Sandbox code updates need OPENAI_API_KEY.",
+      themeCss: "",
+      runtimeScript: "",
+      model,
+      usedFallback: true,
+      problem: "OPENAI_API_KEY is missing.",
+    };
+  }
+
+  const openai = createOpenAI({ apiKey: input.env.OPENAI_API_KEY });
+  try {
+    const { output } = await generateText({
+      model: openai(model),
+      temperature: 0,
+      output: Output.object({
+        schema: sandboxCodeRevisionSchema,
+        name: "sandbox_code_revision",
+        description:
+          "Safe CSS and vanilla JavaScript updates for an existing sandboxed lesson page.",
+      }),
+      system:
+        "You are Lumen's CODE_MODEL for saved student-facing sandbox HTML. Return schema-valid JSON only.",
+      prompt: [
+        "Update only the optional sandbox code for the existing student-facing page: CSS overrides and extra vanilla JavaScript.",
+        "The latest teacher request is the priority. Do not replace the whole HTML document.",
+        "For static lessons, your JavaScript runs after the built-in base runtime. For solar lessons, it runs after the source-controlled runtime. Query the DOM instead of relying on private variables.",
+        "Keep quiz choices, classification choices, objective toggles, entity cards, hover/focus states, and canvas navigation working.",
+        "Use textContent, createElement, classList, dataset, style properties, and event listeners. Do not use imports, network calls, storage, eval, Function, document.write, innerHTML, outerHTML, insertAdjacentHTML, or window.location.",
+        "CSS must not use @import, url(), external assets, executable CSS, position: fixed, page-wide overlays, hidden main content, or tiny text.",
+        "Return replacement CSS in themeCss and replacement custom JavaScript in runtimeScript. No Markdown fences.",
+        input.teachingGuideContext
+          ? `Current teaching guide context:\n${input.teachingGuideContext.slice(0, 18_000)}`
+          : "No teaching guide context was attached; make a presentation-level sandbox code update from the latest request and existing lesson data only.",
+        `Latest teacher request:\n${input.instruction}`,
+        `Current lesson-data JSON excerpt:\n${extractLessonDataScript(input.html)}`,
+        `Existing generated theme CSS excerpt:\n${extractThemeCss(input.html)}`,
+        `Existing HTML excerpt:\n${compactHtmlForPrompt(input.html)}`,
+      ].join("\n\n---\n\n"),
+    });
+
+    const themeCss = stripCodeFence(output.themeCss);
+    const runtimeScript = stripCodeFence(output.runtimeScript);
+    if (!(themeCss || runtimeScript)) {
+      return {
+        reply: output.reply,
+        themeCss: "",
+        runtimeScript: "",
+        model,
+        usedFallback: true,
+        problem: "CODE_MODEL did not return CSS or JavaScript.",
+      };
+    }
+    if (themeCss) {
+      validateSandboxedLessonThemeCss(themeCss);
+    }
+    if (
+      runtimeScript &&
+      (runtimeScript.length > 40_000 ||
+        isUnsafeBrowserRuntimeScript(runtimeScript))
+    ) {
+      return {
+        reply: output.reply,
+        themeCss: "",
+        runtimeScript: "",
+        model,
+        usedFallback: true,
+        problem: "Generated sandbox JavaScript failed safety validation.",
+      };
+    }
+    return {
+      reply: output.reply,
+      themeCss,
+      runtimeScript,
+      model,
+      usedFallback: false,
+    };
+  } catch (error) {
+    return {
+      reply: "I could not update the sandbox code.",
+      themeCss: "",
+      runtimeScript: "",
+      model,
+      usedFallback: true,
+      problem: errorMessage(error),
+    };
+  }
 }
 
 export async function generateLessonRuntimeThemeCss(
@@ -851,16 +995,17 @@ export async function generateLessonRuntimeThemeCss(
   const result = await generateOpenAICode({
     env: input.env,
     system:
-      "You write safe, expressive CSS for Lumen's sandboxed student-facing lesson page. Return only CSS, with no Markdown fences and no explanations.",
+      "You write safe, expressive CSS for Lumen's sandboxed student-facing zoomable knowledge canvas. Return only CSS, with no Markdown fences and no explanations.",
     prompt: [
-      "Create topic-specific CSS for an embedded sandboxed HTML lesson page.",
+      "Create topic-specific CSS for an embedded sandboxed HTML lesson canvas.",
+      "The base shell is a single viewport knowledge canvas: transparent glass rectangles are arranged on a visual stage, and clicking a rectangle with child entities zooms into another canvas level with the same layout.",
       "The CSS will be placed after the base styles, so it should override and enrich the existing shell rather than replace it.",
-      "Make the page colorful, playful, readable, and suitable for a live student-facing teaching demo. Avoid a generic white-card dashboard look.",
+      "Make the canvas animation-rich, readable, and suitable for a live student-facing teaching demo. Avoid a content-long scrolling website, generic white-card dashboard, or teacher-facing lesson plan.",
       "The sandbox is the student presentation, not the teacher guide. Do not style or introduce teacher-facing sections such as teacher notes, teacher narration, facilitation moves, or lesson-planning cards.",
-      "Make interactive areas large and obvious: [data-quiz-choice], [data-classify-choice], [data-objective-toggle], .quiz-card, and .activity-card need generous min-height, padding, and clear hover/focus states.",
-      "Use the lesson topic to choose a visual language: colors, gradients, section accents, soft patterns, and motion should feel specialized to the subject.",
-      "Allowed selectors include :root, .lesson-page, .lesson-hero, .hero-copy, .hero-panel, .lesson-band, .media-showcase, .explore-track, .concept-grid, .explain-timeline, .activity-grid, .quiz-grid, .reflection-grid, .next-challenge, .quiz-card, .activity-card, .explore-beat, .explain-step, .vocab-panel, .example-panel, .reflection-panel, button, [data-quiz-choice], [data-classify-choice], [data-objective-toggle], and pseudo-elements on those selectors.",
-      "Do not use @import, url(), external assets, position: fixed, CSS that hides main content, tiny text, or page-wide overlays. Keep it under 220 lines.",
+      "Make interactive rectangles large and obvious: .entity-node, [data-entity-node], [data-quiz-choice], [data-classify-choice], [data-objective-toggle], .quiz-card, and .activity-card need generous min-height, padding, and clear hover/focus states.",
+      "Use the lesson topic to choose a visual language: colors, section accents, subtle procedural textures, glass refraction, and motion should feel specialized to the subject.",
+      "Allowed selectors include :root, .lesson-page, .knowledge-canvas, .canvas-shell, .canvas-topbar, .canvas-brand, .brand-mark, .canvas-title, .canvas-meta, .pill, .canvas-reset, .canvas-stage, .entity-map, .entity-node, .entity-node-media, .entity-node-label, .entity-node-summary, .entity-node-meta, .entity-chip, .entity-details, .detail-media, .detail-action, .entity-breadcrumb, .entity-tooltip, .quiz-card, .activity-card, .choice-row, .choices, button, [data-entity-node], [data-quiz-choice], [data-classify-choice], [data-objective-toggle], and pseudo-elements on those selectors.",
+      "Do not use @import, url(), external assets, position: fixed, CSS that hides main content, tiny text, page-wide overlays, or body/page scrolling. Keep it under 220 lines.",
       `Teacher transcript:\n${input.prompt}`,
       `Extracted schema entities:\n${entitySummary(input.entities)}`,
       `Student presentation data:\n${JSON.stringify(studentPresentationData(input.plan))}`,
@@ -894,15 +1039,15 @@ export async function generateLessonRuntimeScript(input: {
   const result = await generateOpenAICode({
     env: input.env,
     system:
-      "You write safe, student-facing vanilla JavaScript enhancements for Lumen sandboxed lesson pages. Return only JavaScript code, with no Markdown fences and no explanations.",
+      "You write safe, student-facing vanilla JavaScript enhancements for Lumen sandboxed zoomable knowledge canvases. Return only JavaScript code, with no Markdown fences and no explanations.",
     prompt: [
-      "Create vanilla browser JavaScript for an embedded sandboxed lesson page.",
+      "Create vanilla browser JavaScript for an embedded sandboxed lesson canvas.",
       "Target the quality bar of the bundled solar system demo in this repository: polished visual hierarchy, topic-specific interaction, responsive layout, meaningful motion, clear feedback, and classroom-safe copy.",
-      "The HTML already contains [data-runtime='static-lesson'], [data-objective-toggle], [data-quiz-choice], [data-quiz-answer], [data-quiz-feedback], [data-classify-card], [data-classify-choice], and [data-classify-result]. It also contains <script type='application/json' id='lesson-data'> with { student, media, schemaData }.",
-      "The base sandbox is already arranged as a colorful student presentation with .lesson-hero, .media-showcase, .explore-track, .concept-grid, .explain-timeline, .activity-grid, .quiz-grid, .reflection-grid, and .next-challenge. Enhance those regions or insert one high-value student-facing interactive module near the relevant section; do not flatten the page into generic white cards or repeated rows.",
+      "The HTML already contains [data-runtime='static-lesson'], [data-entity-space], [data-entity-map], [data-entity-node], [data-entity-details], [data-entity-breadcrumb], [data-objective-toggle], [data-quiz-choice], [data-quiz-answer], [data-quiz-feedback], [data-classify-card], [data-classify-choice], and [data-classify-result]. It also contains <script type='application/json' id='lesson-data'> with { student, media, schemaData }.",
+      "The base sandbox already builds a single-viewport glass knowledge canvas from the lesson plan, generated media, quiz/activity data, and Pioneer / GLiNER2 entities. Clicking a rectangle with children opens a new canvas level with the same layout. Enhance this behavior; do not convert it into a long scrolling document.",
       "This sandbox is for students, not the teacher canvas. Do not render teacherNarration, teacherTips, teacher notes, facilitation moves, or lesson-planning instructions.",
-      "You may enhance the static lesson by creating additional sandbox HTML with document.createElement, CSS injected through a <style> element, SVG elements, Canvas 2D, timers, requestAnimationFrame, and DOM event listeners.",
-      "Use Pioneer / GLiNER2 schemaData entities when they help build a concept map, process simulator, timeline, sorting lab, vocabulary hotspot, measurement comparison, or relationship visualization.",
+      "You may enhance the canvas by creating additional sandbox HTML with document.createElement, CSS injected through a <style> element, SVG elements, Canvas 2D, timers, requestAnimationFrame, and DOM event listeners.",
+      "Use Pioneer / GLiNER2 schemaData entities when they help build a concept constellation, process simulator, timeline, sorting lab, vocabulary hotspot, measurement comparison, or relationship visualization inside or above the canvas.",
       "Keep the existing objective toggles, quiz choices, and classification cards working. There may be multiple quiz article elements; compare a choice only with the [data-quiz-answer] inside the closest article.",
       "For classification, compare the picked value after ':' in data-classify-choice with the closest card's data-answer and write feedback into that card's [data-classify-result].",
       "Requirements: no imports, no network calls, no storage, no eval, no Function constructor, no document.write, no innerHTML/outerHTML/insertAdjacentHTML. Use DOM APIs and textContent. Keep it under 360 lines.",
