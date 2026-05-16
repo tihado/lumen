@@ -8,7 +8,13 @@ import {
   useTrackToggle,
   useVoiceAssistant,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import {
+  type AudioCaptureOptions,
+  AudioPresets,
+  type RoomConnectOptions,
+  type RoomOptions,
+  Track,
+} from "livekit-client";
 import { Mic, MicOff, PhoneOff, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +29,33 @@ type SlngVoiceAgentRoomProps = {
   onEnded: () => void;
   onError: (message: string) => void;
 };
+
+const voiceAgentAudioOptions = {
+  autoGainControl: true,
+  channelCount: 1,
+  echoCancellation: true,
+  noiseSuppression: true,
+  sampleRate: 48_000,
+  voiceIsolation: true,
+} satisfies AudioCaptureOptions;
+
+const voiceAgentRoomOptions = {
+  audioCaptureDefaults: voiceAgentAudioOptions,
+  publishDefaults: {
+    audioPreset: AudioPresets.speech,
+    dtx: false,
+    forceStereo: false,
+    red: true,
+  },
+  webAudioMix: true,
+} satisfies RoomOptions;
+
+const voiceAgentConnectOptions = {
+  autoSubscribe: true,
+  maxRetries: 3,
+  peerConnectionTimeout: 20_000,
+  websocketTimeout: 20_000,
+} satisfies RoomConnectOptions;
 
 function VoiceAgentStatus() {
   const { agent, agentTranscriptions, state } = useVoiceAssistant();
@@ -103,11 +136,13 @@ export function SlngVoiceAgentRoom({
 }: SlngVoiceAgentRoomProps) {
   return (
     <LiveKitRoom
-      audio
+      audio={voiceAgentAudioOptions}
       className="mt-3 space-y-3"
       connect
+      connectOptions={voiceAgentConnectOptions}
       onDisconnected={onEnded}
       onError={(error) => onError(error.message)}
+      options={voiceAgentRoomOptions}
       serverUrl={session.livekitUrl}
       token={session.livekitToken}
       video={false}
