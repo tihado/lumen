@@ -1,5 +1,12 @@
 # Lumen
 
+## Recognition
+
+- **3rd Prize** — {Tech: Europe} Paris AI Hackathon, 5/2026
+- **Sponsor Award** — [SLNG](https://slng.ai/)
+
+---
+
 > **Not a wall of text. A canvas you can teach with.**
 
 **Lumen** is a **voice-first AI lesson authoring** web app. A teacher speaks or types a lesson intent, and Lumen turns it into a structured lesson canvas: learning objectives, hook, explanation, worked example, practice activity, quiz, reflection, citations, images, video, audio narration, and a saved HTML lesson that can be reopened later.
@@ -447,14 +454,14 @@ Path alias: `@/*` maps to `./src/*`.
 
 ## Contributors
 
-Everyone below is from `git shortlog -sne --all` (counts include all branches). GitHub links use the git author name as `@handle`, except where inferred from `users.noreply.github.com`.
 
-| #   | Author (git)  | GitHub                                     |
-| --- | ------------- | ------------------------------------------ |
-| 1   | **nvti**      | [@nvti](https://github.com/nvti)           |
-| 2   | **NLag**      | [@NLag](https://github.com/NLag)           |
-| 3   | **honghanhh** | [@honghanhh](https://github.com/honghanhh) |
-| 4   | **lanwyb**    | [@lanwyb](https://github.com/lanwyb)       |
+| #   | Author (git)  | GitHub                                                 |
+| --- | ------------- | ------------------------------------------------------ |
+| 1   | **nvti**      | [@nvti](https://github.com/nvti)                       |
+| 2   | **NLag**      | [@NLag](https://github.com/NLag)                       |
+| 3   | **honghanhh** | [@honghanhh](https://github.com/honghanhh)             |
+| 4   | **lanwyb**    | [@lanwyb](https://github.com/lanwyb)                   |
+| 5   | **pnhneee**    | [@ctpnheee](https://github.com/ctpnheee)                 |
 
 Upstream repo: [tihado/lumen](https://github.com/tihado/lumen).
 
